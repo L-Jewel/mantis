@@ -10,6 +10,8 @@ import {
   ChildNode,
   Scenegraph,
   resolveScenegraphElements,
+  BBoxOwners,
+  TransformOwners,
 } from "./scenegraph";
 import {
   Accessor,
@@ -17,10 +19,12 @@ import {
   ParentProps,
   Show,
   createContext,
+  createEffect,
   createRenderEffect,
   createSignal,
   createUniqueId,
   mergeProps,
+  onCleanup,
   untrack,
 } from "solid-js";
 import { ParentScopeIdContext, Scope, ScopeContext } from "./createName";
@@ -29,6 +33,7 @@ import { ErrorContext, createErrorContext } from "./errorContext";
 import { BluefishError } from "./errors";
 import { getAncestorChain } from "./util/lca";
 import toast, { Toaster } from "solid-toast";
+import gsap from "gsap";
 
 export type BluefishProps = ParentProps<{
   width?: number;
@@ -38,6 +43,18 @@ export type BluefishProps = ParentProps<{
   debug?: boolean;
   positioning?: "absolute" | "relative";
 }>;
+
+type BluefishNodeType = {
+  type: "node";
+  bbox: BBox;
+  bboxOwners: BBoxOwners;
+  transform: Transform;
+  transformOwners: TransformOwners;
+  children: Id[];
+  parent: Id | null;
+  customData?: any;
+  layout: () => void;
+};
 
 declare global {
   interface Window {
@@ -102,6 +119,107 @@ export function Bluefish(props: BluefishProps) {
     uid: createUniqueId(),
   });
 
+  // SCREEN MAGNIFICATION TRAVERSAL PROTOTYPING
+  // Keeps track of the offsets implemented by the node's parents.
+  const [currentOffset, setCurrentOffset] = createSignal({ x: 0, y: 0 });
+  // Information about the currently selected node.
+  const [currentNodeId, setCurrentNodeId] = createSignal(id);
+  const currentNode = () =>
+    scenegraphSignal().scenegraph[currentNodeId()] as BluefishNodeType;
+  const currentBboxInfo = () =>
+    currentNode()?.bbox ?? {
+      left: 0,
+      top: 0,
+      width: 0,
+      height: 0,
+    };
+  const currentTransform = () => {
+    return {
+      x: currentOffset().x + (currentNode()?.transform.translate.x ?? 0),
+      y: currentOffset().y + (currentNode()?.transform.translate.y ?? 0),
+    };
+  };
+  const currentChildren = () => currentNode()?.children ?? [];
+  // Information about the parent of the currently selected node.
+  const currentParentId = () => currentNode()?.parent ?? "";
+  const currentParent = () =>
+    scenegraphSignal().scenegraph[currentParentId()] as BluefishNodeType;
+  const currentSiblings = () => currentParent()?.children ?? [];
+
+  // Returns true if the node is a node, false if it is a ref.
+  function isNode(nodeId: string): boolean {
+    return scenegraphSignal().scenegraph[nodeId].type === "node";
+  }
+
+  let svgRef: SVGSVGElement;
+
+  const handleKeyPress = (event: KeyboardEvent) => {
+    let nextNodeId = currentNodeId();
+    const currentSiblingIndex = currentSiblings().indexOf(currentNodeId());
+
+    // Traverse down to the first child
+    if (event.key === "ArrowDown") {
+      console.log("ArrowDown");
+      if (currentChildren().length) {
+        nextNodeId = currentChildren()[0];
+      }
+      if (currentNodeId() !== nextNodeId && isNode(nextNodeId)) {
+        setCurrentOffset({
+          x: currentTransform().x,
+          y: currentTransform().y,
+        });
+        setCurrentNodeId(nextNodeId);
+      }
+    }
+    // Traverse up to the parent
+    if (event.key === "ArrowUp") {
+      console.log("ArrowUp");
+      if (currentParentId()) {
+        nextNodeId = currentParentId();
+      }
+      if (currentNodeId() !== nextNodeId && isNode(nextNodeId)) {
+        setCurrentNodeId(nextNodeId);
+        setCurrentOffset({
+          x: currentOffset().x - (currentNode()?.transform.translate.x ?? 0),
+          y: currentOffset().y - (currentNode()?.transform.translate.y ?? 0),
+        });
+      }
+    }
+    // Traverse to the next sibling
+    if (event.key === "ArrowRight") {
+      console.log("ArrowRight");
+      if (currentSiblingIndex < currentSiblings().length - 1) {
+        nextNodeId = currentSiblings()[currentSiblingIndex + 1];
+      }
+      if (isNode(nextNodeId)) setCurrentNodeId(nextNodeId);
+    }
+    // Traverse to the previous sibling
+    if (event.key === "ArrowLeft") {
+      console.log("ArrowLeft");
+      if (currentSiblingIndex > 0) {
+        nextNodeId = currentSiblings()[currentSiblingIndex - 1];
+      }
+      if (isNode(nextNodeId)) setCurrentNodeId(nextNodeId);
+    }
+    if (event.key === "Z") {
+      console.log("Z");
+      gsap.to(svgRef, { attr: { viewBox: "0 0 20 20" } });
+    }
+
+    event.preventDefault();
+  };
+
+  document.addEventListener("keydown", handleKeyPress);
+
+  onCleanup(() => {
+    document.removeEventListener("keydown", handleKeyPress);
+  });
+
+  createEffect(() => {
+    console.log(currentNodeId());
+    console.log(JSON.parse(JSON.stringify(currentNode())));
+  });
+
   const layout = (childNodes: ChildNode[]) => {
     untrack(() => {
       for (const childNode of childNodes) {
@@ -156,20 +274,42 @@ export function Bluefish(props: BluefishProps) {
       props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2;
     const height = () =>
       props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2;
+    const defaultViewBox = () =>
+      `${
+        -props.padding! +
+        (props.positioning === "absolute" ? 0 : (paintProps.bbox.left ?? 0))
+      } ${
+        -props.padding! +
+        (props.positioning === "absolute" ? 0 : (paintProps.bbox.top ?? 0))
+      } ${width()} ${height()}`;
+
+    // Reset viewBox to default when 'r' key is pressed
+    const resetViewBox = (event: KeyboardEvent) => {
+      if (event.key === "r") {
+        gsap.to(svgRef, { attr: { viewBox: defaultViewBox() } });
+      }
+    };
+    document.addEventListener("keydown", resetViewBox);
+    onCleanup(() => {
+      document.removeEventListener("keydown", resetViewBox);
+    });
 
     return (
       <svg
         width={width()}
         height={height()}
-        viewBox={`${
-          -props.padding! +
-          (props.positioning === "absolute" ? 0 : paintProps.bbox.left ?? 0)
-        } ${
-          -props.padding! +
-          (props.positioning === "absolute" ? 0 : paintProps.bbox.top ?? 0)
-        } ${width()} ${height()}`}
+        viewBox={defaultViewBox()}
+        ref={svgRef}
       >
         {paintProps.children}
+        <rect
+          x={(currentBboxInfo()?.left ?? 0) + (currentTransform()?.x ?? 0)}
+          y={(currentBboxInfo()?.top ?? 0) + (currentTransform()?.y ?? 0)}
+          width={currentBboxInfo()?.width ?? 0}
+          height={currentBboxInfo()?.height ?? 0}
+          fill="transparent"
+          stroke="red"
+        />
       </svg>
     );
   };
@@ -229,6 +369,17 @@ export function Bluefish(props: BluefishProps) {
       />
       <Show when={props.debug === true}>
         <br />
+        <div
+          style={{
+            float: "left",
+            "margin-right": "40px",
+            "margin-left": "5px",
+          }}
+        >
+          <h1>Current Node</h1>
+          <p>{currentNodeId()}</p>
+          <pre>{JSON.stringify(currentNode(), null, 2)}</pre>
+        </div>
         <div style={{ float: "left", "margin-right": "40px" }}>
           <h1>Scenegraph</h1>
           <pre>{JSON.stringify(scenegraphSignal().scenegraph, null, 2)}</pre>
