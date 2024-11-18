@@ -120,6 +120,7 @@ export function Bluefish(props: BluefishProps) {
   });
 
   // SCREEN MAGNIFICATION TRAVERSAL PROTOTYPING
+  let svgRef: SVGSVGElement;
   // Keeps track of the offsets implemented by the node's parents.
   const [currentOffset, setCurrentOffset] = createSignal({ x: 0, y: 0 });
   // Information about the currently selected node.
@@ -265,7 +266,6 @@ export function Bluefish(props: BluefishProps) {
     children: JSX.Element;
   }) => {
     // SVG View Box Information
-    let svgRef: SVGSVGElement;
     const width = () =>
       props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2;
     const height = () =>
@@ -290,12 +290,14 @@ export function Bluefish(props: BluefishProps) {
     const rectCenterY = () => rectY() + rectHeight() / 2;
 
     // Magnification Information
-    const magnificationFactor = 2;
-    const magnificationWidth = () => width() / magnificationFactor;
-    const magnificationHeight = () => height() / magnificationFactor;
+    const magnificationFactor = () =>
+      1 / Math.max(rectWidth() / width(), rectHeight() / height());
+    const magnificationWidth = () => width() / magnificationFactor();
+    const magnificationHeight = () => height() / magnificationFactor();
     const magnificationViewBox = () =>
       `${rectCenterX() - magnificationWidth() / 2} ${rectCenterY() - magnificationHeight() / 2} ${magnificationWidth()} ${magnificationHeight()}`;
 
+    // Each time the focus changes, redirect the user's view to it.
     createEffect(() => {
       gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
     });
