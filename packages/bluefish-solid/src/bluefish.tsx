@@ -151,8 +151,6 @@ export function Bluefish(props: BluefishProps) {
     return scenegraphSignal().scenegraph[nodeId].type === "node";
   }
 
-  let svgRef: SVGSVGElement;
-
   const handleKeyPress = (event: KeyboardEvent) => {
     let nextNodeId = currentNodeId();
     const currentSiblingIndex = currentSiblings().indexOf(currentNodeId());
@@ -200,10 +198,6 @@ export function Bluefish(props: BluefishProps) {
         nextNodeId = currentSiblings()[currentSiblingIndex - 1];
       }
       if (isNode(nextNodeId)) setCurrentNodeId(nextNodeId);
-    }
-    if (event.key === "Z") {
-      console.log("Z");
-      gsap.to(svgRef, { attr: { viewBox: "0 0 20 20" } });
     }
 
     event.preventDefault();
@@ -270,6 +264,8 @@ export function Bluefish(props: BluefishProps) {
     transform: Transform;
     children: JSX.Element;
   }) => {
+    // SVG View Box Information
+    let svgRef: SVGSVGElement;
     const width = () =>
       props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2;
     const height = () =>
@@ -283,15 +279,40 @@ export function Bluefish(props: BluefishProps) {
         (props.positioning === "absolute" ? 0 : (paintProps.bbox.top ?? 0))
       } ${width()} ${height()}`;
 
-    // Reset viewBox to default when 'r' key is pressed
-    const resetViewBox = (event: KeyboardEvent) => {
+    // Red Box Information
+    const rectX = () =>
+      (currentBboxInfo()?.left ?? 0) + (currentTransform()?.x ?? 0);
+    const rectY = () =>
+      (currentBboxInfo()?.top ?? 0) + (currentTransform()?.y ?? 0);
+    const rectWidth = () => currentBboxInfo()?.width ?? 0;
+    const rectHeight = () => currentBboxInfo()?.height ?? 0;
+    const rectCenterX = () => rectX() + rectWidth() / 2;
+    const rectCenterY = () => rectY() + rectHeight() / 2;
+
+    // Magnification Information
+    const magnificationFactor = 2;
+    const magnificationWidth = () => width() / magnificationFactor;
+    const magnificationHeight = () => height() / magnificationFactor;
+    const magnificationViewBox = () =>
+      `${rectCenterX() - magnificationWidth() / 2} ${rectCenterY() - magnificationHeight() / 2} ${magnificationWidth()} ${magnificationHeight()}`;
+
+    createEffect(() => {
+      gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
+    });
+
+    const updateViewBox = (event: KeyboardEvent) => {
+      // Reset viewBox to default when 'r' key is pressed
       if (event.key === "r") {
         gsap.to(svgRef, { attr: { viewBox: defaultViewBox() } });
       }
+      // Zoom into the red box when 'z' key is pressed
+      if (event.key === "z") {
+        gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
+      }
     };
-    document.addEventListener("keydown", resetViewBox);
+    document.addEventListener("keydown", updateViewBox);
     onCleanup(() => {
-      document.removeEventListener("keydown", resetViewBox);
+      document.removeEventListener("keydown", updateViewBox);
     });
 
     return (
@@ -303,10 +324,10 @@ export function Bluefish(props: BluefishProps) {
       >
         {paintProps.children}
         <rect
-          x={(currentBboxInfo()?.left ?? 0) + (currentTransform()?.x ?? 0)}
-          y={(currentBboxInfo()?.top ?? 0) + (currentTransform()?.y ?? 0)}
-          width={currentBboxInfo()?.width ?? 0}
-          height={currentBboxInfo()?.height ?? 0}
+          x={rectX()}
+          y={rectY()}
+          width={rectWidth()}
+          height={rectHeight()}
           fill="transparent"
           stroke="red"
         />
