@@ -121,8 +121,6 @@ export function Bluefish(props: BluefishProps) {
 
   // SCREEN MAGNIFICATION TRAVERSAL PROTOTYPING
   let svgRef: SVGSVGElement;
-  // Keeps track of the offsets implemented by the node's parents.
-  const [currentOffset, setCurrentOffset] = createSignal({ x: 0, y: 0 });
   // Information about the currently selected node.
   const [currentNodeId, setCurrentNodeId] = createSignal(id);
   const currentNode = () =>
@@ -134,71 +132,94 @@ export function Bluefish(props: BluefishProps) {
       width: 0,
       height: 0,
     };
-  const currentTransform = () => {
-    return {
-      x: currentOffset().x + (currentNode()?.transform.translate.x ?? 0),
-      y: currentOffset().y + (currentNode()?.transform.translate.y ?? 0),
-    };
-  };
   const currentChildren = () => currentNode()?.children ?? [];
   // Information about the parent of the currently selected node.
-  const currentParentId = () => currentNode()?.parent ?? "";
+  const [currentParentId, setCurrentParentId] = createSignal(
+    currentNode()?.parent ?? ""
+  );
   const currentParent = () =>
     scenegraphSignal().scenegraph[currentParentId()] as BluefishNodeType;
   const currentSiblings = () => currentParent()?.children ?? [];
+  // Helper Functions
+  function updateNode(nodeId: string): void {
+    const nextNode = scenegraphSignal().scenegraph[nodeId];
+    if (nextNode.type === "node") {
+      setCurrentNodeId(nodeId);
+      setCurrentParentId(nextNode.parent ?? "");
+    } else {
+      setCurrentNodeId(nextNode.refId);
+      setCurrentParentId(nextNode.parent ?? "");
+      console.log(
+        "Ref node",
+        nextNode.refId,
+        nextNode.parent,
+        currentSiblings()
+      );
+    }
+  }
+  function calculateTransform(nodeId: string): { x: number; y: number } {
+    const currNode = scenegraphSignal().scenegraph[nodeId];
 
-  // Returns true if the node is a node, false if it is a ref.
-  function isNode(nodeId: string): boolean {
-    return scenegraphSignal().scenegraph[nodeId].type === "node";
+    if (!currNode || !currNode.parent) {
+      return { x: 0, y: 0 };
+    }
+    const parentTransform = calculateTransform(currNode.parent);
+    if (currNode.type === "node") {
+      return {
+        x: parentTransform.x + (currNode.transform.translate.x ?? 0),
+        y: parentTransform.y + (currNode.transform.translate.y ?? 0),
+      };
+    } else {
+      return parentTransform;
+    }
   }
 
+  const currentTransform = () => calculateTransform(currentNodeId());
+
+  // Keyboard navigation
   const handleKeyPress = (event: KeyboardEvent) => {
     let nextNodeId = currentNodeId();
-    const currentSiblingIndex = currentSiblings().indexOf(currentNodeId());
+    const currentSiblingIndex = currentSiblings()
+      .map((childId) => {
+        const childNode = scenegraphSignal().scenegraph[childId];
+        if ("refId" in childNode) {
+          return childNode.refId;
+        }
+        return childId;
+      })
+      .indexOf(currentNodeId());
 
     // Traverse down to the first child
     if (event.key === "ArrowDown") {
-      console.log("ArrowDown");
       if (currentChildren().length) {
         nextNodeId = currentChildren()[0];
       }
-      if (currentNodeId() !== nextNodeId && isNode(nextNodeId)) {
-        setCurrentOffset({
-          x: currentTransform().x,
-          y: currentTransform().y,
-        });
-        setCurrentNodeId(nextNodeId);
+      if (currentNodeId() !== nextNodeId) {
+        updateNode(nextNodeId);
       }
     }
     // Traverse up to the parent
     if (event.key === "ArrowUp") {
-      console.log("ArrowUp");
       if (currentParentId()) {
         nextNodeId = currentParentId();
       }
-      if (currentNodeId() !== nextNodeId && isNode(nextNodeId)) {
-        setCurrentNodeId(nextNodeId);
-        setCurrentOffset({
-          x: currentOffset().x - (currentNode()?.transform.translate.x ?? 0),
-          y: currentOffset().y - (currentNode()?.transform.translate.y ?? 0),
-        });
+      if (currentNodeId() !== nextNodeId) {
+        updateNode(nextNodeId);
       }
     }
     // Traverse to the next sibling
     if (event.key === "ArrowRight") {
-      console.log("ArrowRight");
       if (currentSiblingIndex < currentSiblings().length - 1) {
         nextNodeId = currentSiblings()[currentSiblingIndex + 1];
       }
-      if (isNode(nextNodeId)) setCurrentNodeId(nextNodeId);
+      if (nextNodeId !== currentNodeId()) updateNode(nextNodeId);
     }
     // Traverse to the previous sibling
     if (event.key === "ArrowLeft") {
-      console.log("ArrowLeft");
       if (currentSiblingIndex > 0) {
         nextNodeId = currentSiblings()[currentSiblingIndex - 1];
       }
-      if (isNode(nextNodeId)) setCurrentNodeId(nextNodeId);
+      if (nextNodeId !== currentNodeId()) updateNode(nextNodeId);
     }
 
     event.preventDefault();
@@ -211,7 +232,7 @@ export function Bluefish(props: BluefishProps) {
   });
 
   createEffect(() => {
-    console.log(currentNodeId());
+    console.log("current node:", currentNodeId());
     console.log(JSON.parse(JSON.stringify(currentNode())));
   });
 
@@ -267,9 +288,9 @@ export function Bluefish(props: BluefishProps) {
   }) => {
     // SVG View Box Information
     const width = () =>
-      props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2;
+      (props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2) * 2;
     const height = () =>
-      props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2;
+      (props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2) * 2;
     const defaultViewBox = () =>
       `${
         -props.padding! +
