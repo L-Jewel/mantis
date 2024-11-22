@@ -125,13 +125,13 @@ export function Bluefish(props: BluefishProps) {
   const [currentNodeId, setCurrentNodeId] = createSignal(id);
   const currentNode = () =>
     scenegraphSignal().scenegraph[currentNodeId()] as BluefishNodeType;
-  const currentBboxInfo = () =>
-    currentNode()?.bbox ?? {
-      left: 0,
-      top: 0,
-      width: 0,
-      height: 0,
-    };
+  // const currentBboxInfo = () =>
+  //   currentNode()?.bbox ?? {
+  //     left: 0,
+  //     top: 0,
+  //     width: 0,
+  //     height: 0,
+  //   };
   const currentChildren = () => currentNode()?.children ?? [];
   // Information about the parent of the currently selected node.
   const [currentParentId, setCurrentParentId] = createSignal(
@@ -149,13 +149,11 @@ export function Bluefish(props: BluefishProps) {
     } else {
       setCurrentNodeId(nextNode.refId);
       setCurrentParentId(nextNode.parent ?? "");
-      console.log(
-        "Ref node",
-        nextNode.refId,
-        nextNode.parent,
-        currentSiblings()
-      );
     }
+  }
+  function getNodeType(nodeId: string): string {
+    const match = nodeId.match(/([A-Z])\w+/);
+    return match ? match[0].trim() : "";
   }
   function calculateTransform(nodeId: string): { x: number; y: number } {
     const currNode = scenegraphSignal().scenegraph[nodeId];
@@ -173,8 +171,86 @@ export function Bluefish(props: BluefishProps) {
       return parentTransform;
     }
   }
+  function computeBoundingBoxUnion(nodeIds: string[]): {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } {
+    let unionBBox = { left: 0, top: 0, right: 0, bottom: 0 };
+    nodeIds.forEach((nodeId) => {
+      const childNode = scenegraphSignal().scenegraph[nodeId];
+
+      if (childNode && childNode.type === "node" && childNode.bbox) {
+        const childNodeTransform = calculateTransform(nodeId);
+        unionBBox = {
+          left: Math.min(
+            unionBBox.left,
+            childNodeTransform.x + (childNode.bbox.left ?? Infinity)
+          ),
+          top: Math.min(
+            unionBBox.top,
+            childNodeTransform.y + (childNode.bbox.top ?? Infinity)
+          ),
+          right: Math.max(
+            unionBBox.right,
+            childNodeTransform.x +
+              (childNode.bbox.left ?? 0) +
+              (childNode.bbox.width ?? 0)
+          ),
+          bottom: Math.max(
+            unionBBox.bottom,
+            childNodeTransform.y +
+              (childNode.bbox.top ?? 0) +
+              (childNode.bbox.height ?? 0)
+          ),
+        };
+      } else if (childNode && childNode.type === "ref") {
+        const refNode = scenegraphSignal().scenegraph[childNode.refId];
+        const childNodeTransform = calculateTransform(childNode.refId);
+        if (refNode && refNode.type === "node" && refNode.bbox) {
+          unionBBox = {
+            left: Math.min(
+              unionBBox.left,
+              childNodeTransform.x + (refNode.bbox.left ?? Infinity)
+            ),
+            top: Math.min(
+              unionBBox.top,
+              childNodeTransform.y + (refNode.bbox.top ?? Infinity)
+            ),
+            right: Math.max(
+              unionBBox.right,
+              childNodeTransform.x +
+                (refNode.bbox.left ?? 0) +
+                (refNode.bbox.width ?? 0)
+            ),
+            bottom: Math.max(
+              unionBBox.bottom,
+              childNodeTransform.y +
+                (refNode.bbox.top ?? 0) +
+                (refNode.bbox.height ?? 0)
+            ),
+          };
+        }
+      }
+    });
+    return {
+      left: unionBBox.left,
+      top: unionBBox.top,
+      width: unionBBox.right - unionBBox.left,
+      height: unionBBox.bottom - unionBBox.top,
+    };
+  }
 
   const currentTransform = () => calculateTransform(currentNodeId());
+  const currentBboxInfo = () => {
+    const nodeType = getNodeType(currentNodeId());
+    if (nodeType === "Align" || nodeType === "Distribute") {
+      const unionBBox = computeBoundingBoxUnion(currentNode().children);
+      return unionBBox;
+    }
+    return currentNode()?.bbox ?? { left: 0, top: 0, width: 0, height: 0 };
+  };
 
   // Keyboard navigation
   const handleKeyPress = (event: KeyboardEvent) => {
