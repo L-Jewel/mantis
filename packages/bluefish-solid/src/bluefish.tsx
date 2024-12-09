@@ -125,13 +125,6 @@ export function Bluefish(props: BluefishProps) {
   const [currentNodeId, setCurrentNodeId] = createSignal(id);
   const currentNode = () =>
     scenegraphSignal().scenegraph[currentNodeId()] as BluefishNodeType;
-  // const currentBboxInfo = () =>
-  //   currentNode()?.bbox ?? {
-  //     left: 0,
-  //     top: 0,
-  //     width: 0,
-  //     height: 0,
-  //   };
   const currentChildren = () => currentNode()?.children ?? [];
   // Information about the parent of the currently selected node.
   const [currentParentId, setCurrentParentId] = createSignal(
@@ -364,9 +357,9 @@ export function Bluefish(props: BluefishProps) {
   }) => {
     // SVG View Box Information
     const width = () =>
-      (props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2) * 2;
+      props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2;
     const height = () =>
-      (props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2) * 2;
+      props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2;
     const defaultViewBox = () =>
       `${
         -props.padding! +
