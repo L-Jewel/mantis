@@ -15,6 +15,7 @@ import {
 } from "./scenegraph";
 import {
   Accessor,
+  For,
   JSX,
   ParentProps,
   Show,
@@ -34,6 +35,7 @@ import { BluefishError } from "./errors";
 import { getAncestorChain } from "./util/lca";
 import toast, { Toaster } from "solid-toast";
 import gsap from "gsap";
+import * as d3 from "d3";
 
 export type BluefishProps = ParentProps<{
   width?: number;
@@ -54,6 +56,10 @@ type BluefishNodeType = {
   parent: Id | null;
   customData?: any;
   layout: () => void;
+};
+type Point = {
+  x: number;
+  y: number;
 };
 
 declare global {
@@ -121,32 +127,19 @@ export function Bluefish(props: BluefishProps) {
 
   // SCREEN MAGNIFICATION TRAVERSAL PROTOTYPING
   let svgRef: SVGSVGElement;
-  // Information about the currently selected node.
-  const [currentNodeId, setCurrentNodeId] = createSignal(id);
-  const currentNode = () =>
-    scenegraphSignal().scenegraph[currentNodeId()] as BluefishNodeType;
-  const currentChildren = () => currentNode()?.children ?? [];
-  // Information about the parent of the currently selected node.
-  const [currentParentId, setCurrentParentId] = createSignal(
-    currentNode()?.parent ?? ""
-  );
-  const currentParent = () =>
-    scenegraphSignal().scenegraph[currentParentId()] as BluefishNodeType;
-  const currentSiblings = () => currentParent()?.children ?? [];
-  // Helper Functions
-  function updateNode(nodeId: string): void {
-    const nextNode = scenegraphSignal().scenegraph[nodeId];
-    if (nextNode.type === "node") {
-      setCurrentNodeId(nodeId);
-      setCurrentParentId(nextNode.parent ?? "");
-    } else {
-      setCurrentNodeId(nextNode.refId);
-      setCurrentParentId(nextNode.parent ?? "");
-    }
-  }
+  const [midpoints, setMidpoints] = createSignal<Point[]>([]);
+  const midpointsToNodes = new Map<string, string>();
+  // Helper functions
   function getNodeType(nodeId: string): string {
     const match = nodeId.match(/([A-Z])\w+/);
     return match ? match[0].trim() : "";
+  }
+  function resolveNode(nodeId: string): string {
+    const node = scenegraphSignal().scenegraph[nodeId];
+    if (node && node.type === "ref") {
+      return resolveNode(node.refId);
+    }
+    return nodeId;
   }
   function calculateTransform(nodeId: string): { x: number; y: number } {
     const currNode = scenegraphSignal().scenegraph[nodeId];
@@ -234,7 +227,45 @@ export function Bluefish(props: BluefishProps) {
       height: unionBBox.bottom - unionBBox.top,
     };
   }
+  function pointToString(point: Point): string {
+    return `${point.x},${point.y}`;
+  }
+  function getBbox(nodeId: string): BBox {
+    const nodeType = getNodeType(nodeId);
+    const node = scenegraphSignal().scenegraph[nodeId];
+    if (nodeType === "Align" || nodeType === "Distribute") {
+      return computeBoundingBoxUnion((node as BluefishNodeType).children);
+    }
+    if (node && node.type === "node") {
+      return node.bbox;
+    } else {
+      return getBbox(node.refId);
+    }
+  }
 
+  // Calculate the midpoint of each node
+  createEffect(() => {
+    const newMidpoints = [];
+
+    for (const nodeId in scenegraph) {
+      if (getNodeType(nodeId) === "Ref") continue;
+      const nodeBbox = getBbox(nodeId);
+      const nodeTransform = calculateTransform(nodeId);
+      const nodeMidpoint = {
+        x: nodeTransform.x + (nodeBbox.left ?? 0) + (nodeBbox.width ?? 0) / 2,
+        y: nodeTransform.y + (nodeBbox.top ?? 0) + (nodeBbox.height ?? 0) / 2,
+      };
+      newMidpoints.push(nodeMidpoint);
+      midpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
+    }
+
+    setMidpoints(newMidpoints);
+  });
+
+  // Information about the currently selected node
+  const [currentNodeId, setCurrentNodeId] = createSignal<string>(id);
+  const currentNode = () =>
+    scenegraphSignal().scenegraph[currentNodeId()] as BluefishNodeType;
   const currentTransform = () => calculateTransform(currentNodeId());
   const currentBboxInfo = () => {
     const nodeType = getNodeType(currentNodeId());
@@ -244,66 +275,6 @@ export function Bluefish(props: BluefishProps) {
     }
     return currentNode()?.bbox ?? { left: 0, top: 0, width: 0, height: 0 };
   };
-
-  // Keyboard navigation
-  const handleKeyPress = (event: KeyboardEvent) => {
-    let nextNodeId = currentNodeId();
-    const currentSiblingIndex = currentSiblings()
-      .map((childId) => {
-        const childNode = scenegraphSignal().scenegraph[childId];
-        if ("refId" in childNode) {
-          return childNode.refId;
-        }
-        return childId;
-      })
-      .indexOf(currentNodeId());
-
-    // Traverse down to the first child
-    if (event.key === "ArrowDown") {
-      if (currentChildren().length) {
-        nextNodeId = currentChildren()[0];
-      }
-      if (currentNodeId() !== nextNodeId) {
-        updateNode(nextNodeId);
-      }
-    }
-    // Traverse up to the parent
-    if (event.key === "ArrowUp") {
-      if (currentParentId()) {
-        nextNodeId = currentParentId();
-      }
-      if (currentNodeId() !== nextNodeId) {
-        updateNode(nextNodeId);
-      }
-    }
-    // Traverse to the next sibling
-    if (event.key === "ArrowRight") {
-      if (currentSiblingIndex < currentSiblings().length - 1) {
-        nextNodeId = currentSiblings()[currentSiblingIndex + 1];
-      }
-      if (nextNodeId !== currentNodeId()) updateNode(nextNodeId);
-    }
-    // Traverse to the previous sibling
-    if (event.key === "ArrowLeft") {
-      if (currentSiblingIndex > 0) {
-        nextNodeId = currentSiblings()[currentSiblingIndex - 1];
-      }
-      if (nextNodeId !== currentNodeId()) updateNode(nextNodeId);
-    }
-
-    event.preventDefault();
-  };
-
-  document.addEventListener("keydown", handleKeyPress);
-
-  onCleanup(() => {
-    document.removeEventListener("keydown", handleKeyPress);
-  });
-
-  createEffect(() => {
-    console.log("current node:", currentNodeId());
-    console.log(JSON.parse(JSON.stringify(currentNode())));
-  });
 
   const layout = (childNodes: ChildNode[]) => {
     untrack(() => {
@@ -357,17 +328,17 @@ export function Bluefish(props: BluefishProps) {
   }) => {
     // SVG View Box Information
     const width = () =>
-      props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2;
+      (props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2) * 2;
     const height = () =>
-      props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2;
+      (props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2) * 2;
+    const minX = () =>
+      -props.padding! +
+      (props.positioning === "absolute" ? 0 : (paintProps.bbox.left ?? 0));
+    const minY = () =>
+      -props.padding! +
+      (props.positioning === "absolute" ? 0 : (paintProps.bbox.top ?? 0));
     const defaultViewBox = () =>
-      `${
-        -props.padding! +
-        (props.positioning === "absolute" ? 0 : (paintProps.bbox.left ?? 0))
-      } ${
-        -props.padding! +
-        (props.positioning === "absolute" ? 0 : (paintProps.bbox.top ?? 0))
-      } ${width()} ${height()}`;
+      `${minX()} ${minY()} ${width() / 2} ${height() / 2}`;
 
     // Red Box Information
     const rectX = () =>
@@ -380,31 +351,84 @@ export function Bluefish(props: BluefishProps) {
     const rectCenterY = () => rectY() + rectHeight() / 2;
 
     // Magnification Information
-    const magnificationFactor = () =>
-      1 / Math.max(rectWidth() / width(), rectHeight() / height());
+    const [magnificationFactor, setMagnificationFactor] = createSignal(2);
     const magnificationWidth = () => width() / magnificationFactor();
     const magnificationHeight = () => height() / magnificationFactor();
     const magnificationViewBox = () =>
       `${rectCenterX() - magnificationWidth() / 2} ${rectCenterY() - magnificationHeight() / 2} ${magnificationWidth()} ${magnificationHeight()}`;
 
-    // Each time the focus changes, redirect the user's view to it.
-    createEffect(() => {
-      gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
-    });
+    // Voronoi Calculation
+    const delaunay = () =>
+      d3.Delaunay.from(
+        midpoints(),
+        (d) => d.x,
+        (d) => d.y
+      );
+    const voronoi = () =>
+      delaunay().voronoi([minX(), minY(), width(), height()]);
 
-    const updateViewBox = (event: KeyboardEvent) => {
-      // Reset viewBox to default when 'r' key is pressed
-      if (event.key === "r") {
-        gsap.to(svgRef, { attr: { viewBox: defaultViewBox() } });
+    // Calculates mouse position in SVG coordinates
+    // Reference: https://github.com/enxaneta/SVG-mouse-position-in-svg/blob/master/mousePositionSVG.js
+    const [mouseX, setMouseX] = createSignal(0);
+    const [mouseY, setMouseY] = createSignal(0);
+    function getMousePositionSVG(event: MouseEvent): void {
+      let mousePoint = svgRef.createSVGPoint();
+      mousePoint.x = event.clientX;
+      mousePoint.y = event.clientY;
+      const screenCTM = svgRef.getScreenCTM();
+      if (screenCTM) {
+        mousePoint = mousePoint.matrixTransform(screenCTM.inverse());
+        setMouseX(mousePoint.x);
+        setMouseY(mousePoint.y);
       }
-      // Zoom into the red box when 'z' key is pressed
-      if (event.key === "z") {
+    }
+
+    // Handles zoom stuff
+    const [isZoomed, setIsZoomed] = createSignal(false);
+    function zoomInNode() {
+      if (isZoomed()) {
+        gsap.to(svgRef, { attr: { viewBox: defaultViewBox() } });
+      } else {
         gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
       }
-    };
-    document.addEventListener("keydown", updateViewBox);
-    onCleanup(() => {
-      document.removeEventListener("keydown", updateViewBox);
+      setIsZoomed(!isZoomed());
+    }
+    function handleScroll(event: WheelEvent) {
+      // First check if the mouse is in the SVG
+      const elementUnderMouse = document.elementFromPoint(
+        event.clientX,
+        event.clientY
+      );
+      if (elementUnderMouse && svgRef.contains(elementUnderMouse)) {
+        event.preventDefault();
+        const delta = 0.3;
+        if (event.deltaY > 0) {
+          setMagnificationFactor(magnificationFactor() + delta);
+        } else {
+          setMagnificationFactor(Math.max(1, magnificationFactor() - delta));
+        }
+      }
+    }
+    createEffect(() => {
+      if (isZoomed())
+        gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
+    });
+    createEffect(() => {
+      svgRef.addEventListener("mousemove", getMousePositionSVG, false);
+      svgRef.addEventListener("mouseleave", () => {
+        gsap.to(svgRef, { attr: { viewBox: defaultViewBox() } });
+        setIsZoomed(false);
+      });
+      svgRef.addEventListener("click", zoomInNode, false);
+      svgRef.addEventListener("wheel", handleScroll, false);
+    });
+
+    createEffect(() => {
+      const closestPoint = delaunay().find(mouseX(), mouseY());
+      const closestNode = midpointsToNodes.get(
+        pointToString(midpoints()[closestPoint])
+      );
+      setCurrentNodeId(resolveNode(closestNode ?? id));
     });
 
     return (
@@ -415,6 +439,11 @@ export function Bluefish(props: BluefishProps) {
         ref={svgRef}
       >
         {paintProps.children}
+        {/* <For each={midpoints()}>
+          {({ x, y }) => {
+            return <circle cx={x} cy={y} r={3} fill="black" />;
+          }}
+        </For> */}
         <rect
           x={rectX()}
           y={rectY()}
@@ -423,6 +452,8 @@ export function Bluefish(props: BluefishProps) {
           fill="transparent"
           stroke="red"
         />
+        <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
+        {/* <path d={voronoi().render()} fill="none" stroke="purple" /> */}
       </svg>
     );
   };
@@ -489,9 +520,9 @@ export function Bluefish(props: BluefishProps) {
             "margin-left": "5px",
           }}
         >
-          <h1>Current Node</h1>
+          {/* <h1>Current Node</h1>
           <p>{currentNodeId()}</p>
-          <pre>{JSON.stringify(currentNode(), null, 2)}</pre>
+          <pre>{JSON.stringify(currentNode(), null, 2)}</pre> */}
         </div>
         <div style={{ float: "left", "margin-right": "40px" }}>
           <h1>Scenegraph</h1>
