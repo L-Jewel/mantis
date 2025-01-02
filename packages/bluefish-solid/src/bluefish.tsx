@@ -126,14 +126,23 @@ export function Bluefish(props: BluefishProps) {
   });
 
   // SCREEN MAGNIFICATION TRAVERSAL PROTOTYPING
-  let svgRef: SVGSVGElement;
+  let svgRef: SVGSVGElement | undefined;
   const [midpoints, setMidpoints] = createSignal<Point[]>([]);
   const midpointsToNodes = new Map<string, string>();
   // Helper functions
+  /**
+   * @param nodeId a string that corresponds to the ID of a node in the scenegraph
+   * @returns the type of that node
+   */
   function getNodeType(nodeId: string): string {
     const match = nodeId.match(/([A-Z])\w+/);
     return match ? match[0].trim() : "";
   }
+  /**
+   * Resolve reference nodes into the nodes that they reference. If the node is not a reference node, return the same node.
+   * @param nodeId a string that corresponds to the ID of a node in the scenegraph
+   * @returns a string that corresponds to the ID of the resolved node
+   */
   function resolveNode(nodeId: string): string {
     const node = scenegraphSignal().scenegraph[nodeId];
     if (node && node.type === "ref") {
@@ -141,6 +150,10 @@ export function Bluefish(props: BluefishProps) {
     }
     return nodeId;
   }
+  /**
+   * @param nodeId a string that corresponds to the ID of a node in the scenegraph
+   * @returns the node's transform/bbox offset.
+   */
   function calculateTransform(nodeId: string): { x: number; y: number } {
     const currNode = scenegraphSignal().scenegraph[nodeId];
 
@@ -230,6 +243,10 @@ export function Bluefish(props: BluefishProps) {
   function pointToString(point: Point): string {
     return `${point.x},${point.y}`;
   }
+  /**
+   * @param nodeId a string that corresponds to the ID of a node in the scenegraph
+   * @returns the node's bbox
+   */
   function getBbox(nodeId: string): BBox {
     const nodeType = getNodeType(nodeId);
     const node = scenegraphSignal().scenegraph[nodeId];
@@ -328,17 +345,16 @@ export function Bluefish(props: BluefishProps) {
   }) => {
     // SVG View Box Information
     const width = () =>
-      (props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2) * 2;
+      props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2;
     const height = () =>
-      (props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2) * 2;
+      props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2;
     const minX = () =>
       -props.padding! +
       (props.positioning === "absolute" ? 0 : (paintProps.bbox.left ?? 0));
     const minY = () =>
       -props.padding! +
       (props.positioning === "absolute" ? 0 : (paintProps.bbox.top ?? 0));
-    const defaultViewBox = () =>
-      `${minX()} ${minY()} ${width() / 2} ${height() / 2}`;
+    const defaultViewBox = () => `${minX()} ${minY()} ${width()} ${height()}`;
 
     // Red Box Information
     const rectX = () =>
@@ -372,26 +388,30 @@ export function Bluefish(props: BluefishProps) {
     const [mouseX, setMouseX] = createSignal(0);
     const [mouseY, setMouseY] = createSignal(0);
     function getMousePositionSVG(event: MouseEvent): void {
-      let mousePoint = svgRef.createSVGPoint();
-      mousePoint.x = event.clientX;
-      mousePoint.y = event.clientY;
-      const screenCTM = svgRef.getScreenCTM();
-      if (screenCTM) {
-        mousePoint = mousePoint.matrixTransform(screenCTM.inverse());
-        setMouseX(mousePoint.x);
-        setMouseY(mousePoint.y);
+      if (svgRef) {
+        let mousePoint = svgRef.createSVGPoint();
+        mousePoint.x = event.clientX;
+        mousePoint.y = event.clientY;
+        const screenCTM = svgRef.getScreenCTM();
+        if (screenCTM) {
+          mousePoint = mousePoint.matrixTransform(screenCTM.inverse());
+          setMouseX(mousePoint.x);
+          setMouseY(mousePoint.y);
+        }
       }
     }
 
     // Handles zoom stuff
     const [isZoomed, setIsZoomed] = createSignal(false);
     function zoomInNode() {
-      if (isZoomed()) {
-        gsap.to(svgRef, { attr: { viewBox: defaultViewBox() } });
-      } else {
-        gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
+      if (svgRef) {
+        if (isZoomed()) {
+          gsap.to(svgRef, { attr: { viewBox: defaultViewBox() } });
+        } else {
+          gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
+        }
+        setIsZoomed(!isZoomed());
       }
-      setIsZoomed(!isZoomed());
     }
     function handleScroll(event: WheelEvent) {
       // First check if the mouse is in the SVG
@@ -399,7 +419,7 @@ export function Bluefish(props: BluefishProps) {
         event.clientX,
         event.clientY
       );
-      if (elementUnderMouse && svgRef.contains(elementUnderMouse)) {
+      if (elementUnderMouse && svgRef && svgRef.contains(elementUnderMouse)) {
         event.preventDefault();
         const delta = 0.3;
         if (event.deltaY > 0) {
@@ -410,17 +430,19 @@ export function Bluefish(props: BluefishProps) {
       }
     }
     createEffect(() => {
-      if (isZoomed())
+      if (svgRef && isZoomed())
         gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
     });
     createEffect(() => {
-      svgRef.addEventListener("mousemove", getMousePositionSVG, false);
-      svgRef.addEventListener("mouseleave", () => {
-        gsap.to(svgRef, { attr: { viewBox: defaultViewBox() } });
-        setIsZoomed(false);
-      });
-      svgRef.addEventListener("click", zoomInNode, false);
-      svgRef.addEventListener("wheel", handleScroll, false);
+      if (svgRef) {
+        svgRef.addEventListener("mousemove", getMousePositionSVG, false);
+        svgRef.addEventListener("mouseleave", () => {
+          gsap.to(svgRef, { attr: { viewBox: defaultViewBox() } });
+          setIsZoomed(false);
+        });
+        svgRef.addEventListener("click", zoomInNode, false);
+        svgRef.addEventListener("wheel", handleScroll, false);
+      }
     });
 
     createEffect(() => {
@@ -432,29 +454,37 @@ export function Bluefish(props: BluefishProps) {
     });
 
     return (
-      <svg
-        width={width()}
-        height={height()}
-        viewBox={defaultViewBox()}
-        ref={svgRef}
-      >
-        {paintProps.children}
-        {/* <For each={midpoints()}>
-          {({ x, y }) => {
-            return <circle cx={x} cy={y} r={3} fill="black" />;
-          }}
-        </For> */}
-        <rect
-          x={rectX()}
-          y={rectY()}
-          width={rectWidth()}
-          height={rectHeight()}
-          fill="transparent"
-          stroke="red"
-        />
-        <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
-        {/* <path d={voronoi().render()} fill="none" stroke="purple" /> */}
-      </svg>
+      <>
+        <svg
+          width={width()}
+          height={height()}
+          viewBox={defaultViewBox()}
+          ref={svgRef}
+        >
+          {paintProps.children}
+          <rect
+            x={rectX()}
+            y={rectY()}
+            width={rectWidth()}
+            height={rectHeight()}
+            fill="transparent"
+            stroke="red"
+          />
+          <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
+        </svg>
+        <svg width={width()} height={height()} viewBox={defaultViewBox()}>
+          {paintProps.children}
+          <rect
+            x={rectX()}
+            y={rectY()}
+            width={rectWidth()}
+            height={rectHeight()}
+            fill="transparent"
+            stroke="red"
+          />
+          <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
+        </svg>
+      </>
     );
   };
 
