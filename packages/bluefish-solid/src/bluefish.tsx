@@ -15,7 +15,6 @@ import {
 } from "./scenegraph";
 import {
   Accessor,
-  For,
   JSX,
   ParentProps,
   Show,
@@ -25,7 +24,6 @@ import {
   createSignal,
   createUniqueId,
   mergeProps,
-  onCleanup,
   untrack,
 } from "solid-js";
 import { ParentScopeIdContext, Scope, ScopeContext } from "./createName";
@@ -36,6 +34,7 @@ import { getAncestorChain } from "./util/lca";
 import toast, { Toaster } from "solid-toast";
 import gsap from "gsap";
 import * as d3 from "d3";
+import { MantisComponentType, useMantisProvider } from "./miniMap";
 
 export type BluefishProps = ParentProps<{
   width?: number;
@@ -44,6 +43,8 @@ export type BluefishProps = ParentProps<{
   id?: string;
   debug?: boolean;
   positioning?: "absolute" | "relative";
+  enlargementFactor?: number;
+  mantisComponentType: MantisComponentType;
 }>;
 
 type BluefishNodeType = {
@@ -127,6 +128,7 @@ export function Bluefish(props: BluefishProps) {
 
   // SCREEN MAGNIFICATION TRAVERSAL PROTOTYPING
   let svgRef: SVGSVGElement | undefined;
+  const mantisContext = useMantisProvider();
   const [midpoints, setMidpoints] = createSignal<Point[]>([]);
   const midpointsToNodes = new Map<string, string>();
   // Helper functions
@@ -260,23 +262,25 @@ export function Bluefish(props: BluefishProps) {
     }
   }
 
-  // Calculate the midpoint of each node
+  // Calculate the midpoint of each node (Mini-Map Main SVG Only)
   createEffect(() => {
-    const newMidpoints = [];
+    if (props.mantisComponentType === MantisComponentType.MMMain) {
+      const newMidpoints = [];
 
-    for (const nodeId in scenegraph) {
-      if (getNodeType(nodeId) === "Ref") continue;
-      const nodeBbox = getBbox(nodeId);
-      const nodeTransform = calculateTransform(nodeId);
-      const nodeMidpoint = {
-        x: nodeTransform.x + (nodeBbox.left ?? 0) + (nodeBbox.width ?? 0) / 2,
-        y: nodeTransform.y + (nodeBbox.top ?? 0) + (nodeBbox.height ?? 0) / 2,
-      };
-      newMidpoints.push(nodeMidpoint);
-      midpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
+      for (const nodeId in scenegraph) {
+        if (getNodeType(nodeId) === "Ref") continue;
+        const nodeBbox = getBbox(nodeId);
+        const nodeTransform = calculateTransform(nodeId);
+        const nodeMidpoint = {
+          x: nodeTransform.x + (nodeBbox.left ?? 0) + (nodeBbox.width ?? 0) / 2,
+          y: nodeTransform.y + (nodeBbox.top ?? 0) + (nodeBbox.height ?? 0) / 2,
+        };
+        newMidpoints.push(nodeMidpoint);
+        midpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
+      }
+
+      setMidpoints(newMidpoints);
     }
-
-    setMidpoints(newMidpoints);
   });
 
   // Information about the currently selected node
@@ -344,44 +348,22 @@ export function Bluefish(props: BluefishProps) {
     children: JSX.Element;
   }) => {
     // SVG View Box Information
+    const enlargementFactor = props.enlargementFactor ?? 1;
+    console.log(enlargementFactor);
     const width = () =>
-      props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2;
+      (props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2) *
+      enlargementFactor;
     const height = () =>
-      props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2;
+      (props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2) *
+      enlargementFactor;
     const minX = () =>
       -props.padding! +
       (props.positioning === "absolute" ? 0 : (paintProps.bbox.left ?? 0));
     const minY = () =>
       -props.padding! +
       (props.positioning === "absolute" ? 0 : (paintProps.bbox.top ?? 0));
-    const defaultViewBox = () => `${minX()} ${minY()} ${width()} ${height()}`;
-
-    // Red Box Information
-    const rectX = () =>
-      (currentBboxInfo()?.left ?? 0) + (currentTransform()?.x ?? 0);
-    const rectY = () =>
-      (currentBboxInfo()?.top ?? 0) + (currentTransform()?.y ?? 0);
-    const rectWidth = () => currentBboxInfo()?.width ?? 0;
-    const rectHeight = () => currentBboxInfo()?.height ?? 0;
-    const rectCenterX = () => rectX() + rectWidth() / 2;
-    const rectCenterY = () => rectY() + rectHeight() / 2;
-
-    // Magnification Information
-    const [magnificationFactor, setMagnificationFactor] = createSignal(2);
-    const magnificationWidth = () => width() / magnificationFactor();
-    const magnificationHeight = () => height() / magnificationFactor();
-    const magnificationViewBox = () =>
-      `${rectCenterX() - magnificationWidth() / 2} ${rectCenterY() - magnificationHeight() / 2} ${magnificationWidth()} ${magnificationHeight()}`;
-
-    // Voronoi Calculation
-    const delaunay = () =>
-      d3.Delaunay.from(
-        midpoints(),
-        (d) => d.x,
-        (d) => d.y
-      );
-    const voronoi = () =>
-      delaunay().voronoi([minX(), minY(), width(), height()]);
+    const defaultViewBox = () =>
+      `${minX()} ${minY()} ${width() / enlargementFactor} ${height() / enlargementFactor}`;
 
     // Calculates mouse position in SVG coordinates
     // Reference: https://github.com/enxaneta/SVG-mouse-position-in-svg/blob/master/mousePositionSVG.js
@@ -401,7 +383,43 @@ export function Bluefish(props: BluefishProps) {
       }
     }
 
-    // Handles zoom stuff
+    // Red Box Information
+    const [rectX, setRectX] = createSignal(0);
+    const [rectY, setRectY] = createSignal(0);
+    const [rectWidth, setRectWidth] = createSignal(0);
+    const [rectHeight, setRectHeight] = createSignal(0);
+    const rectCenterX = () => rectX() + rectWidth() / 2;
+    const rectCenterY = () => rectY() + rectHeight() / 2;
+
+    // Magnification Information
+    const [magnificationFactor, setMagnificationFactor] =
+      createSignal(enlargementFactor);
+    const magnificationWidth = () => width() / magnificationFactor();
+    const magnificationHeight = () => height() / magnificationFactor();
+    const [magnificationX, setMagnificationX] = createSignal(
+      rectCenterX() - magnificationWidth() / 2
+    );
+    const [magnificationY, setMagnificationY] = createSignal(
+      rectCenterY() - magnificationHeight() / 2
+    );
+    createEffect(() => {
+      setMagnificationX(rectCenterX() - magnificationWidth() / 2);
+      setMagnificationY(rectCenterY() - magnificationHeight() / 2);
+    });
+    const magnificationViewBox = () =>
+      `${magnificationX()} ${magnificationY()} ${magnificationWidth()} ${magnificationHeight()}`;
+
+    // Voronoi Calculation
+    // TODO - For performance, maybe only calculate this for certain component types
+    const delaunay = () =>
+      d3.Delaunay.from(
+        midpoints(),
+        (d) => d.x,
+        (d) => d.y
+      );
+
+    // VISUAL LOGIC
+    // Handles zoom-related functionalities
     const [isZoomed, setIsZoomed] = createSignal(false);
     function zoomInNode() {
       if (svgRef) {
@@ -429,28 +447,100 @@ export function Bluefish(props: BluefishProps) {
         }
       }
     }
+    // Makes the mini-map rectangle draggable
+    const [dragStartX, setDragStartX] = createSignal(0);
+    const [dragStartY, setDragStartY] = createSignal(0);
+    function handleMouseDown(event: MouseEvent) {
+      if (mantisContext) {
+        mantisContext.setIsDragging(true);
+        setDragStartX(event.clientX / enlargementFactor - rectX());
+        setDragStartY(event.clientY / enlargementFactor - rectY());
+      }
+    }
+    function handleDrag(event: MouseEvent) {
+      if (mantisContext && mantisContext.isDragging()) {
+        setRectX(event.clientX / enlargementFactor - dragStartX());
+        setRectY(event.clientY / enlargementFactor - dragStartY());
+        mantisContext.setViewBBox(
+          `${rectX()} ${rectY()} ${rectWidth()} ${rectHeight()}`
+        );
+      }
+    }
+    function endDrag() {
+      if (mantisContext) mantisContext.setIsDragging(false);
+    }
+
+    // Mini-Map Main Component Only
     createEffect(() => {
-      if (svgRef && isZoomed())
-        gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
-    });
-    createEffect(() => {
-      if (svgRef) {
-        svgRef.addEventListener("mousemove", getMousePositionSVG, false);
-        svgRef.addEventListener("mouseleave", () => {
-          gsap.to(svgRef, { attr: { viewBox: defaultViewBox() } });
-          setIsZoomed(false);
-        });
-        svgRef.addEventListener("click", zoomInNode, false);
-        svgRef.addEventListener("wheel", handleScroll, false);
+      // TODO - is this necessary?
+      if (props.mantisComponentType == MantisComponentType.MMMain && svgRef) {
+        if (isZoomed()) {
+          gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
+          if (mantisContext) mantisContext.setViewBBox(magnificationViewBox());
+        } else {
+          if (mantisContext) mantisContext.setViewBBox(defaultViewBox());
+        }
       }
     });
 
+    // SVG Event Listeners
     createEffect(() => {
-      const closestPoint = delaunay().find(mouseX(), mouseY());
-      const closestNode = midpointsToNodes.get(
-        pointToString(midpoints()[closestPoint])
-      );
-      setCurrentNodeId(resolveNode(closestNode ?? id));
+      if (svgRef) {
+        svgRef.addEventListener(
+          "mousemove",
+          (e) => {
+            getMousePositionSVG(e);
+            handleDrag(e);
+          },
+          false
+        );
+        if (props.mantisComponentType === MantisComponentType.MMMain) {
+          svgRef.addEventListener("click", zoomInNode, false);
+          svgRef.addEventListener("wheel", handleScroll, false);
+        }
+        if (props.mantisComponentType === MantisComponentType.MMMiniMap) {
+          svgRef.addEventListener("mousedown", handleMouseDown, false);
+          svgRef.addEventListener("mouseup", endDrag, false);
+          svgRef.addEventListener("mouseleave", endDrag, false);
+        }
+      }
+    });
+    // Navigational logic (bubble cursor)
+    createEffect(() => {
+      if (props.mantisComponentType === MantisComponentType.MMMain) {
+        const closestPoint = delaunay().find(mouseX(), mouseY());
+        const closestNode = midpointsToNodes.get(
+          pointToString(midpoints()[closestPoint])
+        );
+        setCurrentNodeId(resolveNode(closestNode ?? id));
+      }
+    });
+
+    // MINI-MAP LOGIC
+    createEffect(() => {
+      if (
+        mantisContext &&
+        props.mantisComponentType === MantisComponentType.MMMiniMap
+      ) {
+        const viewBBoxSplit = mantisContext.viewBBox().split(" ");
+        setRectX(parseFloat(viewBBoxSplit[0]));
+        setRectY(parseFloat(viewBBoxSplit[1]));
+        setRectWidth(parseFloat(viewBBoxSplit[2]));
+        setRectHeight(parseFloat(viewBBoxSplit[3]));
+      } else if (
+        mantisContext &&
+        props.mantisComponentType === MantisComponentType.MMMain
+      ) {
+        setRectX((currentBboxInfo()?.left ?? 0) + (currentTransform()?.x ?? 0));
+        setRectY((currentBboxInfo()?.top ?? 0) + (currentTransform()?.y ?? 0));
+        setRectWidth(currentBboxInfo()?.width ?? 0);
+        setRectHeight(currentBboxInfo()?.height ?? 0);
+        if (mantisContext.isDragging()) {
+          const viewBBoxSplit = mantisContext.viewBBox().split(" ");
+          setMagnificationX(parseFloat(viewBBoxSplit[0]));
+          setMagnificationY(parseFloat(viewBBoxSplit[1]));
+        }
+      }
     });
 
     return (
@@ -461,14 +551,17 @@ export function Bluefish(props: BluefishProps) {
         ref={svgRef}
       >
         {paintProps.children}
-        <rect
-          x={rectX()}
-          y={rectY()}
-          width={rectWidth()}
-          height={rectHeight()}
-          fill="transparent"
-          stroke="red"
-        />
+        {props.mantisComponentType === MantisComponentType.MMMiniMap && (
+          <rect
+            x={rectX()}
+            y={rectY()}
+            width={rectWidth()}
+            height={rectHeight()}
+            fill="transparent"
+            stroke="red"
+            stroke-width={10}
+          />
+        )}
         <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
       </svg>
     );
