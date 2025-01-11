@@ -454,37 +454,23 @@ export function Bluefish(props: BluefishProps) {
     });
 
     return (
-      <>
-        <svg
-          width={width()}
-          height={height()}
-          viewBox={defaultViewBox()}
-          ref={svgRef}
-        >
-          {paintProps.children}
-          <rect
-            x={rectX()}
-            y={rectY()}
-            width={rectWidth()}
-            height={rectHeight()}
-            fill="transparent"
-            stroke="red"
-          />
-          <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
-        </svg>
-        <svg width={width()} height={height()} viewBox={defaultViewBox()}>
-          {paintProps.children}
-          <rect
-            x={rectX()}
-            y={rectY()}
-            width={rectWidth()}
-            height={rectHeight()}
-            fill="transparent"
-            stroke="red"
-          />
-          <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
-        </svg>
-      </>
+      <svg
+        width={width()}
+        height={height()}
+        viewBox={defaultViewBox()}
+        ref={svgRef}
+      >
+        {paintProps.children}
+        <rect
+          x={rectX()}
+          y={rectY()}
+          width={rectWidth()}
+          height={rectHeight()}
+          fill="transparent"
+          stroke="red"
+        />
+        <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
+      </svg>
     );
   };
 
