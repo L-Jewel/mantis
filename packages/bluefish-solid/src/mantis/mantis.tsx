@@ -10,7 +10,16 @@ import {
 export enum MantisComponentType {
   MMMain,
   MMMiniMap,
+  SplitScreen,
 }
+
+export function isTraversalType(type: MantisComponentType) {
+  return (
+    type === MantisComponentType.MMMain ||
+    type === MantisComponentType.SplitScreen
+  );
+}
+
 export type MantisState = {
   viewBBox: Accessor<string>;
   setViewBBox: Setter<string>;

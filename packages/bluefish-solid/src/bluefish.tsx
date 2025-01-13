@@ -34,7 +34,11 @@ import { getAncestorChain } from "./util/lca";
 import toast, { Toaster } from "solid-toast";
 import gsap from "gsap";
 import * as d3 from "d3";
-import { MantisComponentType, useMantisProvider } from "./mantis";
+import {
+  isTraversalType,
+  MantisComponentType,
+  useMantisProvider,
+} from "./mantis";
 
 export type BluefishProps = ParentProps<{
   width?: number;
@@ -262,9 +266,9 @@ export function Bluefish(props: BluefishProps) {
     }
   }
 
-  // Calculate the midpoint of each node (Mini-Map Main SVG Only)
+  // Calculate the midpoint of each node (Traversal Components Only)
   createEffect(() => {
-    if (props.mantisComponentType === MantisComponentType.MMMain) {
+    if (isTraversalType(props.mantisComponentType)) {
       const newMidpoints = [];
 
       for (const nodeId in scenegraph) {
@@ -347,6 +351,8 @@ export function Bluefish(props: BluefishProps) {
     transform: Transform;
     children: JSX.Element;
   }) => {
+    const GSAP_DURATION = 0.75;
+
     // SVG View Box Information
     const enlargementFactor = props.enlargementFactor ?? 1;
     const width = () =>
@@ -368,6 +374,7 @@ export function Bluefish(props: BluefishProps) {
     // Reference: https://github.com/enxaneta/SVG-mouse-position-in-svg/blob/master/mousePositionSVG.js
     const [mouseX, setMouseX] = createSignal(0);
     const [mouseY, setMouseY] = createSignal(0);
+    const [elementActive, setElementActive] = createSignal(false);
     const [mouseActive, setMouseActive] = createSignal(true);
     function getMousePositionSVG(event: MouseEvent): void {
       if (svgRef) {
@@ -380,6 +387,17 @@ export function Bluefish(props: BluefishProps) {
           setMouseX(mousePoint.x);
           setMouseY(mousePoint.y);
         }
+      }
+    }
+    function detectElementActive(event: MouseEvent): void {
+      const elementUnderMouse = document.elementFromPoint(
+        event.clientX,
+        event.clientY
+      );
+      if (elementUnderMouse && svgRef && svgRef.contains(elementUnderMouse)) {
+        setElementActive(true);
+      } else {
+        setElementActive(false);
       }
     }
 
@@ -426,12 +444,12 @@ export function Bluefish(props: BluefishProps) {
         if (isZoomed()) {
           gsap.to(svgRef, {
             attr: { viewBox: defaultViewBox() },
-            duration: 0.75,
+            duration: GSAP_DURATION,
           });
         } else {
           gsap.to(svgRef, {
             attr: { viewBox: magnificationViewBox() },
-            duration: 0.75,
+            duration: GSAP_DURATION,
           });
         }
         setIsZoomed(!isZoomed());
@@ -476,17 +494,28 @@ export function Bluefish(props: BluefishProps) {
       if (mantisContext) mantisContext.setIsDragging(false);
     }
 
-    // Mini-Map Main Component Only
+    // Visual Traversal Logic (Mini-Map Main + Split Screen Components)
     createEffect(() => {
-      if (props.mantisComponentType == MantisComponentType.MMMain && svgRef) {
-        if (isZoomed() && mantisContext) {
-          gsap.to(svgRef, {
-            attr: { viewBox: magnificationViewBox() },
-            duration: mantisContext.isDragging() ? 0.5 : 0.75,
-          });
-          mantisContext.setViewBBox(magnificationViewBox());
-        } else {
-          if (mantisContext) mantisContext.setViewBBox(defaultViewBox());
+      if (svgRef) {
+        if (props.mantisComponentType == MantisComponentType.MMMain) {
+          if (isZoomed() && mantisContext) {
+            gsap.to(svgRef, {
+              attr: { viewBox: magnificationViewBox() },
+              duration: mantisContext.isDragging() ? 0.5 : GSAP_DURATION,
+            });
+            mantisContext.setViewBBox(magnificationViewBox());
+          } else {
+            if (mantisContext) mantisContext.setViewBBox(defaultViewBox());
+          }
+        } else if (
+          props.mantisComponentType == MantisComponentType.SplitScreen
+        ) {
+          if (isZoomed()) {
+            gsap.to(svgRef, {
+              attr: { viewBox: magnificationViewBox() },
+              duration: GSAP_DURATION,
+            });
+          }
         }
       }
     });
@@ -498,7 +527,8 @@ export function Bluefish(props: BluefishProps) {
      */
     function handleKeyPress(event: KeyboardEvent) {
       if (
-        props.mantisComponentType === MantisComponentType.MMMain &&
+        isTraversalType(props.mantisComponentType) &&
+        elementActive() &&
         event.key === "f"
       ) {
         setMouseActive(!mouseActive());
@@ -506,6 +536,8 @@ export function Bluefish(props: BluefishProps) {
     }
     createEffect(() => {
       if (svgRef) {
+        document.addEventListener("keydown", handleKeyPress);
+        document.addEventListener("mousemove", detectElementActive);
         svgRef.addEventListener(
           "mousemove",
           (e) => {
@@ -514,8 +546,7 @@ export function Bluefish(props: BluefishProps) {
           },
           false
         );
-        document.addEventListener("keydown", handleKeyPress);
-        if (props.mantisComponentType === MantisComponentType.MMMain) {
+        if (isTraversalType(props.mantisComponentType)) {
           svgRef.addEventListener("click", zoomInNode, false);
           svgRef.addEventListener("wheel", handleScroll, false);
         }
@@ -528,7 +559,7 @@ export function Bluefish(props: BluefishProps) {
     });
     // Navigational logic (bubble cursor)
     createEffect(() => {
-      if (props.mantisComponentType === MantisComponentType.MMMain) {
+      if (isTraversalType(props.mantisComponentType)) {
         const closestPoint = delaunay().find(mouseX(), mouseY());
         const closestNode = midpointsToNodes.get(
           pointToString(midpoints()[closestPoint])
@@ -548,15 +579,16 @@ export function Bluefish(props: BluefishProps) {
         setRectY(parseFloat(viewBBoxSplit[1]));
         setRectWidth(parseFloat(viewBBoxSplit[2]));
         setRectHeight(parseFloat(viewBBoxSplit[3]));
-      } else if (
-        mantisContext &&
-        props.mantisComponentType === MantisComponentType.MMMain
-      ) {
+      } else if (isTraversalType(props.mantisComponentType)) {
         setRectX((currentBboxInfo()?.left ?? 0) + (currentTransform()?.x ?? 0));
         setRectY((currentBboxInfo()?.top ?? 0) + (currentTransform()?.y ?? 0));
         setRectWidth(currentBboxInfo()?.width ?? 0);
         setRectHeight(currentBboxInfo()?.height ?? 0);
-        if (mantisContext.isDragging()) {
+        if (
+          props.mantisComponentType === MantisComponentType.MMMain &&
+          mantisContext &&
+          mantisContext.isDragging()
+        ) {
           const viewBBoxSplit = mantisContext.viewBBox().split(" ");
           setMagnificationX(parseFloat(viewBBoxSplit[0]));
           setMagnificationY(parseFloat(viewBBoxSplit[1]));
