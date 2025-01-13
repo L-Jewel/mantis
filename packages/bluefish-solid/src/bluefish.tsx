@@ -349,7 +349,6 @@ export function Bluefish(props: BluefishProps) {
   }) => {
     // SVG View Box Information
     const enlargementFactor = props.enlargementFactor ?? 1;
-    console.log(enlargementFactor);
     const width = () =>
       (props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2) *
       enlargementFactor;
@@ -369,6 +368,7 @@ export function Bluefish(props: BluefishProps) {
     // Reference: https://github.com/enxaneta/SVG-mouse-position-in-svg/blob/master/mousePositionSVG.js
     const [mouseX, setMouseX] = createSignal(0);
     const [mouseY, setMouseY] = createSignal(0);
+    const [mouseActive, setMouseActive] = createSignal(true);
     function getMousePositionSVG(event: MouseEvent): void {
       if (svgRef) {
         let mousePoint = svgRef.createSVGPoint();
@@ -424,9 +424,15 @@ export function Bluefish(props: BluefishProps) {
     function zoomInNode() {
       if (svgRef) {
         if (isZoomed()) {
-          gsap.to(svgRef, { attr: { viewBox: defaultViewBox() } });
+          gsap.to(svgRef, {
+            attr: { viewBox: defaultViewBox() },
+            duration: 0.75,
+          });
         } else {
-          gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
+          gsap.to(svgRef, {
+            attr: { viewBox: magnificationViewBox() },
+            duration: 0.75,
+          });
         }
         setIsZoomed(!isZoomed());
       }
@@ -439,11 +445,11 @@ export function Bluefish(props: BluefishProps) {
       );
       if (elementUnderMouse && svgRef && svgRef.contains(elementUnderMouse)) {
         event.preventDefault();
-        const delta = 0.3;
+        const DELTA = 0.3;
         if (event.deltaY > 0) {
-          setMagnificationFactor(magnificationFactor() + delta);
+          setMagnificationFactor(magnificationFactor() + DELTA);
         } else {
-          setMagnificationFactor(Math.max(1, magnificationFactor() - delta));
+          setMagnificationFactor(Math.max(1, magnificationFactor() - DELTA));
         }
       }
     }
@@ -472,11 +478,13 @@ export function Bluefish(props: BluefishProps) {
 
     // Mini-Map Main Component Only
     createEffect(() => {
-      // TODO - is this necessary?
       if (props.mantisComponentType == MantisComponentType.MMMain && svgRef) {
-        if (isZoomed()) {
-          gsap.to(svgRef, { attr: { viewBox: magnificationViewBox() } });
-          if (mantisContext) mantisContext.setViewBBox(magnificationViewBox());
+        if (isZoomed() && mantisContext) {
+          gsap.to(svgRef, {
+            attr: { viewBox: magnificationViewBox() },
+            duration: mantisContext.isDragging() ? 0.5 : 0.75,
+          });
+          mantisContext.setViewBBox(magnificationViewBox());
         } else {
           if (mantisContext) mantisContext.setViewBBox(defaultViewBox());
         }
@@ -484,16 +492,29 @@ export function Bluefish(props: BluefishProps) {
     });
 
     // SVG Event Listeners
+    /**
+     * When the 'f' key is pressed, toggle whether or not the mouse is frozen on the
+     * main SVG.
+     */
+    function handleKeyPress(event: KeyboardEvent) {
+      if (
+        props.mantisComponentType === MantisComponentType.MMMain &&
+        event.key === "f"
+      ) {
+        setMouseActive(!mouseActive());
+      }
+    }
     createEffect(() => {
       if (svgRef) {
         svgRef.addEventListener(
           "mousemove",
           (e) => {
-            getMousePositionSVG(e);
+            if (mouseActive()) getMousePositionSVG(e);
             handleDrag(e);
           },
           false
         );
+        document.addEventListener("keydown", handleKeyPress);
         if (props.mantisComponentType === MantisComponentType.MMMain) {
           svgRef.addEventListener("click", zoomInNode, false);
           svgRef.addEventListener("wheel", handleScroll, false);
