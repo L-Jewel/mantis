@@ -6,9 +6,7 @@ import {
   useContext,
   createContext,
 } from "solid-js";
-import Bluefish from "./bluefish";
 
-// MANTIS PROTOTYPES
 export enum MantisComponentType {
   MMMain,
   MMMiniMap,
@@ -22,7 +20,7 @@ export type MantisState = {
 
 const MantisContext = createContext<MantisState>();
 
-const MantisProvider = (props: ParentProps) => {
+export const MantisProvider = (props: ParentProps) => {
   const [viewBBox, setViewBBox] = createSignal(`0 0 0 0`);
   const [isDragging, setIsDragging] = createSignal(false);
   const providerState = {
@@ -41,24 +39,3 @@ const MantisProvider = (props: ParentProps) => {
 export function useMantisProvider() {
   return useContext(MantisContext);
 }
-
-const MiniMap = (props: ParentProps & { enlargementFactor?: number }) => {
-  return (
-    <MantisProvider>
-      <Bluefish
-        mantisComponentType={MantisComponentType.MMMain}
-        enlargementFactor={props.enlargementFactor ?? 1}
-      >
-        {props.children}
-      </Bluefish>
-      <Bluefish
-        mantisComponentType={MantisComponentType.MMMiniMap}
-        enlargementFactor={(props.enlargementFactor ?? 1) / 2}
-      >
-        {props.children}
-      </Bluefish>
-    </MantisProvider>
-  );
-};
-
-export default MiniMap;

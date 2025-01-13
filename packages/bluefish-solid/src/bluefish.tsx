@@ -34,7 +34,7 @@ import { getAncestorChain } from "./util/lca";
 import toast, { Toaster } from "solid-toast";
 import gsap from "gsap";
 import * as d3 from "d3";
-import { MantisComponentType, useMantisProvider } from "./miniMap";
+import { MantisComponentType, useMantisProvider } from "./mantis";
 
 export type BluefishProps = ParentProps<{
   width?: number;
