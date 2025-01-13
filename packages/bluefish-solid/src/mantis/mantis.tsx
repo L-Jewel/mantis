@@ -5,39 +5,80 @@ import {
   createSignal,
   useContext,
   createContext,
+  createEffect,
 } from "solid-js";
 
 export enum MantisComponentType {
   MMMain,
   MMMiniMap,
-  SplitScreen,
+  SSLeft,
+  SSRight,
 }
 
-export function isTraversalType(type: MantisComponentType) {
+export function isSplitScreenType(type: MantisComponentType) {
   return (
-    type === MantisComponentType.MMMain ||
-    type === MantisComponentType.SplitScreen
+    type === MantisComponentType.SSLeft || type === MantisComponentType.SSRight
   );
 }
 
-export type MantisState = {
-  viewBBox: Accessor<string>;
-  setViewBBox: Setter<string>;
-  isDragging: Accessor<boolean>;
-  setIsDragging: Setter<boolean>;
-};
+export function isTraversalType(type: MantisComponentType) {
+  return type === MantisComponentType.MMMain || isSplitScreenType(type);
+}
+
+export function isMiniMapContext(context: MantisState | undefined) {
+  return context?.type === "MM";
+}
+
+export function isSplitScreenContext(context: MantisState | undefined) {
+  return context?.type === "SS";
+}
+
+export type MantisState =
+  | {
+      type: "MM";
+      viewBBox: Accessor<string>;
+      setViewBBox: Setter<string>;
+      isDragging: Accessor<boolean>;
+      setIsDragging: Setter<boolean>;
+    }
+  | {
+      type: "SS";
+      leftViewBBox: Accessor<string>;
+      setLeftViewBBox: Setter<string>;
+      rightViewBBox: Accessor<string>;
+      setRightViewBBox: Setter<string>;
+    };
 
 const MantisContext = createContext<MantisState>();
 
-export const MantisProvider = (props: ParentProps) => {
-  const [viewBBox, setViewBBox] = createSignal(`0 0 0 0`);
-  const [isDragging, setIsDragging] = createSignal(false);
-  const providerState = {
-    viewBBox,
-    setViewBBox,
-    isDragging,
-    setIsDragging,
-  };
+export const MantisProvider = (
+  props: ParentProps & { providerType: "MM" | "SS" }
+) => {
+  let providerState: MantisState | undefined;
+  createEffect(() => {
+    if (props.providerType === "MM") {
+      const [viewBBox, setViewBBox] = createSignal(`0 0 0 0`);
+      const [isDragging, setIsDragging] = createSignal(false);
+      providerState = {
+        type: "MM",
+        viewBBox,
+        setViewBBox,
+        isDragging,
+        setIsDragging,
+      };
+    } else {
+      const [leftViewBBox, setLeftViewBBox] = createSignal(`0 0 0 0`);
+      const [rightViewBBox, setRightViewBBox] = createSignal(`0 0 0 0`);
+      providerState = {
+        type: "SS",
+        leftViewBBox,
+        setLeftViewBBox,
+        rightViewBBox,
+        setRightViewBBox,
+      };
+    }
+  });
+
   return (
     <MantisContext.Provider value={providerState}>
       {props.children}

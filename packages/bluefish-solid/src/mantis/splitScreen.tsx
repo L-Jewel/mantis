@@ -17,15 +17,15 @@ export const SplitScreen = (
         "flex-direction": props.flexDirection,
       }}
     >
-      <MantisProvider>
+      <MantisProvider providerType="SS">
         <Bluefish
-          mantisComponentType={MantisComponentType.SplitScreen}
+          mantisComponentType={MantisComponentType.SSLeft}
           enlargementFactor={props.enlargementFactor}
         >
           {props.children}
         </Bluefish>
         <Bluefish
-          mantisComponentType={MantisComponentType.SplitScreen}
+          mantisComponentType={MantisComponentType.SSRight}
           enlargementFactor={props.enlargementFactor}
         >
           {props.children}

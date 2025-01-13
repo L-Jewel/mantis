@@ -6,7 +6,7 @@ export const MiniMap = (
   props: ParentProps & { enlargementFactor?: number }
 ) => {
   return (
-    <MantisProvider>
+    <MantisProvider providerType="MM">
       <Bluefish
         mantisComponentType={MantisComponentType.MMMain}
         enlargementFactor={props.enlargementFactor ?? 1}

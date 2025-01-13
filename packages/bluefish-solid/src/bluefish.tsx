@@ -35,6 +35,8 @@ import toast, { Toaster } from "solid-toast";
 import gsap from "gsap";
 import * as d3 from "d3";
 import {
+  isMiniMapContext,
+  isSplitScreenType,
   isTraversalType,
   MantisComponentType,
   useMantisProvider,
@@ -475,14 +477,14 @@ export function Bluefish(props: BluefishProps) {
     const [dragStartX, setDragStartX] = createSignal(0);
     const [dragStartY, setDragStartY] = createSignal(0);
     function handleMouseDown(event: MouseEvent) {
-      if (mantisContext) {
+      if (isMiniMapContext(mantisContext)) {
         mantisContext.setIsDragging(true);
         setDragStartX(event.clientX / enlargementFactor - rectX());
         setDragStartY(event.clientY / enlargementFactor - rectY());
       }
     }
     function handleDrag(event: MouseEvent) {
-      if (mantisContext && mantisContext.isDragging()) {
+      if (isMiniMapContext(mantisContext) && mantisContext.isDragging()) {
         setRectX(event.clientX / enlargementFactor - dragStartX());
         setRectY(event.clientY / enlargementFactor - dragStartY());
         mantisContext.setViewBBox(
@@ -491,14 +493,17 @@ export function Bluefish(props: BluefishProps) {
       }
     }
     function endDrag() {
-      if (mantisContext) mantisContext.setIsDragging(false);
+      if (isMiniMapContext(mantisContext)) mantisContext.setIsDragging(false);
     }
 
     // Visual Traversal Logic (Mini-Map Main + Split Screen Components)
     createEffect(() => {
       if (svgRef) {
-        if (props.mantisComponentType == MantisComponentType.MMMain) {
-          if (isZoomed() && mantisContext) {
+        if (
+          props.mantisComponentType == MantisComponentType.MMMain &&
+          isMiniMapContext(mantisContext)
+        ) {
+          if (isZoomed()) {
             gsap.to(svgRef, {
               attr: { viewBox: magnificationViewBox() },
               duration: mantisContext.isDragging() ? 0.5 : GSAP_DURATION,
@@ -507,9 +512,7 @@ export function Bluefish(props: BluefishProps) {
           } else {
             if (mantisContext) mantisContext.setViewBBox(defaultViewBox());
           }
-        } else if (
-          props.mantisComponentType == MantisComponentType.SplitScreen
-        ) {
+        } else if (isSplitScreenType(props.mantisComponentType)) {
           if (isZoomed()) {
             gsap.to(svgRef, {
               attr: { viewBox: magnificationViewBox() },
@@ -571,7 +574,7 @@ export function Bluefish(props: BluefishProps) {
     // MINI-MAP LOGIC
     createEffect(() => {
       if (
-        mantisContext &&
+        isMiniMapContext(mantisContext) &&
         props.mantisComponentType === MantisComponentType.MMMiniMap
       ) {
         const viewBBoxSplit = mantisContext.viewBBox().split(" ");
@@ -586,7 +589,7 @@ export function Bluefish(props: BluefishProps) {
         setRectHeight(currentBboxInfo()?.height ?? 0);
         if (
           props.mantisComponentType === MantisComponentType.MMMain &&
-          mantisContext &&
+          isMiniMapContext(mantisContext) &&
           mantisContext.isDragging()
         ) {
           const viewBBoxSplit = mantisContext.viewBBox().split(" ");
