@@ -36,6 +36,7 @@ import gsap from "gsap";
 import * as d3 from "d3";
 import {
   isMiniMapContext,
+  isSplitScreenContext,
   isSplitScreenType,
   isTraversalType,
   MantisComponentType,
@@ -353,7 +354,9 @@ export function Bluefish(props: BluefishProps) {
     transform: Transform;
     children: JSX.Element;
   }) => {
+    // "GLOBAL" CONSTANTS
     const GSAP_DURATION = 0.75;
+    const SCROLL_DELTA = 0.4;
 
     // SVG View Box Information
     const enlargementFactor = props.enlargementFactor ?? 1;
@@ -403,29 +406,35 @@ export function Bluefish(props: BluefishProps) {
       }
     }
 
+    // Selected Node BBox Information
+    const selNodeX = () =>
+      (currentBboxInfo()?.left ?? 0) + (currentTransform()?.x ?? 0);
+    const selNodeY = () =>
+      (currentBboxInfo()?.top ?? 0) + (currentTransform()?.y ?? 0);
+    const selNodeWidth = () => currentBboxInfo()?.width ?? 0;
+    const selNodeHeight = () => currentBboxInfo()?.height ?? 0;
+    const selNodeCenterX = () => selNodeX() + selNodeWidth() / 2;
+    const selNodeCenterY = () => selNodeY() + selNodeHeight() / 2;
+
     // Red Box Information
     const [rectX, setRectX] = createSignal(0);
     const [rectY, setRectY] = createSignal(0);
     const [rectWidth, setRectWidth] = createSignal(0);
     const [rectHeight, setRectHeight] = createSignal(0);
-    const rectCenterX = () => rectX() + rectWidth() / 2;
-    const rectCenterY = () => rectY() + rectHeight() / 2;
 
-    // Magnification Information
+    // Magnification Information (i.e. the user's view box)
     const [magnificationFactor, setMagnificationFactor] =
       createSignal(enlargementFactor);
     const magnificationWidth = () => width() / magnificationFactor();
     const magnificationHeight = () => height() / magnificationFactor();
-    const [magnificationX, setMagnificationX] = createSignal(
-      rectCenterX() - magnificationWidth() / 2
-    );
-    const [magnificationY, setMagnificationY] = createSignal(
-      rectCenterY() - magnificationHeight() / 2
-    );
-    createEffect(() => {
-      setMagnificationX(rectCenterX() - magnificationWidth() / 2);
-      setMagnificationY(rectCenterY() - magnificationHeight() / 2);
-    });
+    const [magnificationCenterX, setMagnificationCenterX] =
+      createSignal(selNodeCenterX());
+    const [magnificationCenterY, setMagnificationCenterY] =
+      createSignal(selNodeCenterY());
+    const magnificationX = () =>
+      magnificationCenterX() - magnificationWidth() / 2;
+    const magnificationY = () =>
+      magnificationCenterY() - magnificationHeight() / 2;
     const magnificationViewBox = () =>
       `${magnificationX()} ${magnificationY()} ${magnificationWidth()} ${magnificationHeight()}`;
 
@@ -463,13 +472,19 @@ export function Bluefish(props: BluefishProps) {
         event.clientX,
         event.clientY
       );
-      if (elementUnderMouse && svgRef && svgRef.contains(elementUnderMouse)) {
+      if (
+        elementUnderMouse &&
+        isZoomed() &&
+        svgRef &&
+        svgRef.contains(elementUnderMouse)
+      ) {
         event.preventDefault();
-        const DELTA = 0.3;
         if (event.deltaY > 0) {
-          setMagnificationFactor(magnificationFactor() + DELTA);
+          setMagnificationFactor(magnificationFactor() + SCROLL_DELTA);
         } else {
-          setMagnificationFactor(Math.max(1, magnificationFactor() - DELTA));
+          setMagnificationFactor(
+            Math.max(1, magnificationFactor() - SCROLL_DELTA)
+          );
         }
       }
     }
@@ -510,7 +525,7 @@ export function Bluefish(props: BluefishProps) {
             });
             mantisContext.setViewBBox(magnificationViewBox());
           } else {
-            if (mantisContext) mantisContext.setViewBBox(defaultViewBox());
+            mantisContext.setViewBBox(defaultViewBox());
           }
         } else if (isSplitScreenType(props.mantisComponentType)) {
           if (isZoomed()) {
@@ -563,11 +578,23 @@ export function Bluefish(props: BluefishProps) {
     // Navigational logic (bubble cursor)
     createEffect(() => {
       if (isTraversalType(props.mantisComponentType)) {
+        // Finds the node closest to the cursor.
         const closestPoint = delaunay().find(mouseX(), mouseY());
         const closestNode = midpointsToNodes.get(
           pointToString(midpoints()[closestPoint])
         );
         setCurrentNodeId(resolveNode(closestNode ?? id));
+        // Update the user's view to center around that node.
+        setMagnificationCenterX(selNodeCenterX());
+        setMagnificationCenterY(selNodeCenterY());
+        // SPLIT SCREEN - Put this component's view box into the global context.
+        if (isSplitScreenContext(mantisContext)) {
+          if (props.mantisComponentType === MantisComponentType.SSLeft) {
+            mantisContext.setLeftViewBBox(magnificationViewBox());
+          } else {
+            mantisContext.setRightViewBBox(magnificationViewBox());
+          }
+        }
       }
     });
 
@@ -577,25 +604,21 @@ export function Bluefish(props: BluefishProps) {
         isMiniMapContext(mantisContext) &&
         props.mantisComponentType === MantisComponentType.MMMiniMap
       ) {
+        // Have the rectangle in the mini-map respond to the main window.
         const viewBBoxSplit = mantisContext.viewBBox().split(" ");
         setRectX(parseFloat(viewBBoxSplit[0]));
         setRectY(parseFloat(viewBBoxSplit[1]));
         setRectWidth(parseFloat(viewBBoxSplit[2]));
         setRectHeight(parseFloat(viewBBoxSplit[3]));
-      } else if (isTraversalType(props.mantisComponentType)) {
-        setRectX((currentBboxInfo()?.left ?? 0) + (currentTransform()?.x ?? 0));
-        setRectY((currentBboxInfo()?.top ?? 0) + (currentTransform()?.y ?? 0));
-        setRectWidth(currentBboxInfo()?.width ?? 0);
-        setRectHeight(currentBboxInfo()?.height ?? 0);
-        if (
-          props.mantisComponentType === MantisComponentType.MMMain &&
-          isMiniMapContext(mantisContext) &&
-          mantisContext.isDragging()
-        ) {
-          const viewBBoxSplit = mantisContext.viewBBox().split(" ");
-          setMagnificationX(parseFloat(viewBBoxSplit[0]));
-          setMagnificationY(parseFloat(viewBBoxSplit[1]));
-        }
+      } else if (
+        props.mantisComponentType === MantisComponentType.MMMain &&
+        isMiniMapContext(mantisContext) &&
+        mantisContext.isDragging()
+      ) {
+        // Update the user's view box when the mini-map rectangle is dragged.
+        const [vbbX, vbbY, vbbW, vbbH] = mantisContext.viewBBox().split(" ");
+        setMagnificationCenterX(parseFloat(vbbX) + parseFloat(vbbW) / 2);
+        setMagnificationCenterY(parseFloat(vbbY) + parseFloat(vbbH) / 2);
       }
     });
 
@@ -607,6 +630,7 @@ export function Bluefish(props: BluefishProps) {
         ref={svgRef}
       >
         {paintProps.children}
+        {/* Mini-Map Rectangle */}
         {props.mantisComponentType === MantisComponentType.MMMiniMap && (
           <rect
             x={rectX()}
@@ -618,6 +642,8 @@ export function Bluefish(props: BluefishProps) {
             stroke-width={10}
           />
         )}
+        {/* Split Screen Rectangles */}
+        {/* {isSplitScreenContext(mantisContext) && props.mantisComponentType === MantisComponentType.SSLeft ? <rect} */}
         <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
       </svg>
     );

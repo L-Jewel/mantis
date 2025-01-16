@@ -5,7 +5,6 @@ import {
   createSignal,
   useContext,
   createContext,
-  createEffect,
 } from "solid-js";
 
 export enum MantisComponentType {
@@ -15,12 +14,22 @@ export enum MantisComponentType {
   SSRight,
 }
 
+/**
+ * @returns true if the component of type `type` is a part of the Split Screen
+ * functionality.
+ */
 export function isSplitScreenType(type: MantisComponentType) {
   return (
     type === MantisComponentType.SSLeft || type === MantisComponentType.SSRight
   );
 }
 
+/**
+ * Differentiate between components that users can use to traverse the diagram, and
+ * components with other purposes (e.g. the mini-map).
+ * @returns true if the component of type `type` is a component that users can use
+ * to traverse the diagram.
+ */
 export function isTraversalType(type: MantisComponentType) {
   return type === MantisComponentType.MMMain || isSplitScreenType(type);
 }
@@ -55,29 +64,30 @@ export const MantisProvider = (
   props: ParentProps & { providerType: "MM" | "SS" }
 ) => {
   let providerState: MantisState | undefined;
-  createEffect(() => {
-    if (props.providerType === "MM") {
-      const [viewBBox, setViewBBox] = createSignal(`0 0 0 0`);
-      const [isDragging, setIsDragging] = createSignal(false);
-      providerState = {
-        type: "MM",
-        viewBBox,
-        setViewBBox,
-        isDragging,
-        setIsDragging,
-      };
-    } else {
-      const [leftViewBBox, setLeftViewBBox] = createSignal(`0 0 0 0`);
-      const [rightViewBBox, setRightViewBBox] = createSignal(`0 0 0 0`);
-      providerState = {
-        type: "SS",
-        leftViewBBox,
-        setLeftViewBBox,
-        rightViewBBox,
-        setRightViewBBox,
-      };
-    }
-  });
+
+  if (props.providerType === "MM") {
+    // MINI-MAP
+    const [viewBBox, setViewBBox] = createSignal(`0 0 0 0`);
+    const [isDragging, setIsDragging] = createSignal(false);
+    providerState = {
+      type: "MM",
+      viewBBox,
+      setViewBBox,
+      isDragging,
+      setIsDragging,
+    };
+  } else {
+    // SPLIT-SCREEN
+    const [leftViewBBox, setLeftViewBBox] = createSignal(`0 0 0 0`);
+    const [rightViewBBox, setRightViewBBox] = createSignal(`0 0 0 0`);
+    providerState = {
+      type: "SS",
+      leftViewBBox,
+      setLeftViewBBox,
+      rightViewBBox,
+      setRightViewBBox,
+    };
+  }
 
   return (
     <MantisContext.Provider value={providerState}>
