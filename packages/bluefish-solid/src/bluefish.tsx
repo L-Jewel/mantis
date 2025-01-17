@@ -40,6 +40,7 @@ import {
   isSplitScreenType,
   isTraversalType,
   MantisComponentType,
+  MantisTraversalPattern,
   useMantisProvider,
 } from "./mantis";
 
@@ -52,8 +53,8 @@ export type BluefishProps = ParentProps<{
   positioning?: "absolute" | "relative";
   enlargementFactor?: number;
   mantisComponentType: MantisComponentType;
+  mantisTraversalPattern?: MantisTraversalPattern;
 }>;
-
 type BluefishNodeType = {
   type: "node";
   bbox: BBox;
@@ -68,6 +69,12 @@ type BluefishNodeType = {
 type Point = {
   x: number;
   y: number;
+};
+type ViewBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 declare global {
@@ -355,8 +362,12 @@ export function Bluefish(props: BluefishProps) {
     children: JSX.Element;
   }) => {
     // "GLOBAL" CONSTANTS
-    const GSAP_DURATION = 0.75;
+    const GSAP_DURATION =
+      props.mantisTraversalPattern === MantisTraversalPattern.Bubble
+        ? 0.75
+        : 1.25;
     const SCROLL_DELTA = 0.4;
+    const CURSOR_EPSILON = 5;
 
     // SVG View Box Information
     const enlargementFactor = props.enlargementFactor ?? 1;
@@ -575,24 +586,42 @@ export function Bluefish(props: BluefishProps) {
         }
       }
     });
-    // Navigational logic (bubble cursor)
+    // Navigational logic
     createEffect(() => {
       if (isTraversalType(props.mantisComponentType)) {
-        // Finds the node closest to the cursor.
-        const closestPoint = delaunay().find(mouseX(), mouseY());
-        const closestNode = midpointsToNodes.get(
-          pointToString(midpoints()[closestPoint])
-        );
-        setCurrentNodeId(resolveNode(closestNode ?? id));
-        // Update the user's view to center around that node.
-        setMagnificationCenterX(selNodeCenterX());
-        setMagnificationCenterY(selNodeCenterY());
+        if (props.mantisTraversalPattern === MantisTraversalPattern.Bubble) {
+          // Finds the node closest to the cursor.
+          const closestPoint = delaunay().find(mouseX(), mouseY());
+          const closestNode = midpointsToNodes.get(
+            pointToString(midpoints()[closestPoint])
+          );
+          setCurrentNodeId(resolveNode(closestNode ?? id));
+          // Update the user's view to center around that node.
+          setMagnificationCenterX(selNodeCenterX());
+          setMagnificationCenterY(selNodeCenterY());
+        } else {
+          setMagnificationCenterX((currX: number) => {
+            return Math.abs(currX - mouseX()) > CURSOR_EPSILON
+              ? mouseX()
+              : currX;
+          });
+          setMagnificationCenterY((currY: number) => {
+            return Math.abs(currY - mouseY()) > CURSOR_EPSILON
+              ? mouseY()
+              : currY;
+          });
+          // console.log(mouseX(), mouseY());
+        }
         // SPLIT SCREEN - Put this component's view box into the global context.
         if (isSplitScreenContext(mantisContext)) {
           if (props.mantisComponentType === MantisComponentType.SSLeft) {
-            mantisContext.setLeftViewBBox(magnificationViewBox());
+            mantisContext.setLeftViewBBox(
+              isZoomed() ? magnificationViewBox() : defaultViewBox()
+            );
           } else {
-            mantisContext.setRightViewBBox(magnificationViewBox());
+            mantisContext.setRightViewBBox(
+              isZoomed() ? magnificationViewBox() : defaultViewBox()
+            );
           }
         }
       }
@@ -622,6 +651,169 @@ export function Bluefish(props: BluefishProps) {
       }
     });
 
+    // HELPER FUNCTIONS
+    /**
+     * @returns the point within `viewBox` that is closest to `point`.
+     */
+    function closestPointInViewBox(viewBox: ViewBox, point: Point): Point {
+      const PADDING = 15;
+      return {
+        x: Math.max(
+          viewBox.x + PADDING,
+          Math.min(point.x, viewBox.x + viewBox.width - 2 * PADDING)
+        ),
+        y: Math.max(
+          viewBox.y + PADDING,
+          Math.min(point.y, viewBox.y + viewBox.height - 2 * PADDING)
+        ),
+      };
+    }
+    /**
+     * @returns true if `point1` is in the same place as `point2`
+     */
+    function pointEquals(point1: Point, point2: Point): boolean {
+      return point1.x === point2.x && point1.y === point2.y;
+    }
+
+    /**
+     * @returns true if `viewBox1` and `viewBox2` overlap.
+     */
+    function checkViewBoxOverlap(
+      viewBox1: { x: number; y: number; width: number; height: number },
+      viewBox2: { x: number; y: number; width: number; height: number }
+    ): boolean {
+      const xOverlap =
+        viewBox1.x < viewBox2.x + viewBox2.width &&
+        viewBox1.x + viewBox1.width > viewBox2.x;
+      const yOverlap =
+        viewBox1.y < viewBox2.y + viewBox2.height &&
+        viewBox1.y + viewBox1.height > viewBox2.y;
+      return xOverlap && yOverlap;
+    }
+
+    /**
+     * @param arrowTarget the direction that the arrow is pointing
+     * @param arrowStart the point where the arrow starts (i.e. tip of arrowhead)
+     * @param arrowLength length of the arrow
+     * @returns where the arrow should end for the inputted parameters to be true.
+     */
+    function calculateArrowEnd(
+      arrowTarget: Point,
+      arrowStart: Point,
+      arrowLength: number
+    ): { x: number; y: number } {
+      const vectorX = arrowStart.x - arrowTarget.x;
+      const vectorY = arrowStart.y - arrowTarget.y;
+      const magnitude = Math.sqrt(Math.pow(vectorX, 2) + Math.pow(vectorY, 2));
+      if (magnitude === 0) {
+        return arrowStart;
+      }
+      return {
+        x: arrowStart.x + (vectorX / magnitude) * arrowLength,
+        y: arrowStart.y + (vectorY / magnitude) * arrowLength,
+      };
+    }
+
+    const OffScreenArrow = (props: {
+      arrowStart: Point;
+      arrowEnd: Point;
+      arrowLength: number;
+      arrowColor: string;
+    }) => {
+      return (
+        <>
+          <defs>
+            <marker
+              id="vbArrowhead"
+              markerWidth="10"
+              markerHeight="7"
+              refX="0"
+              refY="3.5"
+              orient="auto"
+            >
+              <polygon points="0 0, 10 3.5, 0 7" fill={props.arrowColor} />
+            </marker>
+          </defs>
+          <line
+            x2={props.arrowStart.x}
+            y2={props.arrowStart.y}
+            x1={props.arrowEnd.x}
+            y1={props.arrowEnd.y}
+            stroke={props.arrowColor}
+            stroke-width="2"
+            marker-end="url(#vbArrowhead)"
+          />
+        </>
+      );
+    };
+
+    const ViewBoxRect = (props: {
+      viewBox: string | undefined;
+      stroke?: string;
+      strokeWidth?: number;
+    }) => {
+      // Unpack the view box from the other screen.
+      const viewBox = () => (props.viewBox ?? "0 0 0 0").split(" ");
+      const vbX = () => parseFloat(viewBox()[0]);
+      const vbY = () => parseFloat(viewBox()[1]);
+      const vbW = () => parseFloat(viewBox()[2]);
+      const vbH = () => parseFloat(viewBox()[3]);
+      // Calculate the center point of that view box.
+      const vbCenterPoint = () => {
+        return { x: vbX() + vbW() / 2, y: vbY() + vbH() / 2 };
+      };
+      // Calculate the point within the current view box that's closest to the center
+      // of the other view box.
+      const arrowStart = () =>
+        closestPointInViewBox(
+          isZoomed()
+            ? {
+                x: magnificationX(),
+                y: magnificationY(),
+                width: magnificationWidth(),
+                height: magnificationHeight(),
+              }
+            : {
+                x: minX(),
+                y: minY(),
+                width: width() / enlargementFactor,
+                height: height() / enlargementFactor,
+              },
+          vbCenterPoint()
+        );
+      // Calculate where the arrow pointing towards that view box ends.
+      const arrowLength = () =>
+        0.25 * Math.min(magnificationHeight(), magnificationWidth());
+      const arrowEnd = () =>
+        calculateArrowEnd(vbCenterPoint(), arrowStart(), arrowLength());
+
+      const arrowColor = "red";
+
+      return (
+        <>
+          <rect
+            x={vbX()}
+            y={vbY()}
+            width={vbW()}
+            height={vbH()}
+            fill="transparent"
+            stroke={props.stroke}
+            stroke-width={props.strokeWidth}
+          />
+          {isZoomed() &&
+            !pointEquals(arrowStart(), vbCenterPoint()) &&
+            props.viewBox !== defaultViewBox() && (
+              <OffScreenArrow
+                arrowColor={arrowColor}
+                arrowStart={arrowStart()}
+                arrowEnd={arrowEnd()}
+                arrowLength={arrowLength()}
+              />
+            )}
+        </>
+      );
+    };
+
     return (
       <svg
         width={width()}
@@ -643,7 +835,22 @@ export function Bluefish(props: BluefishProps) {
           />
         )}
         {/* Split Screen Rectangles */}
-        {/* {isSplitScreenContext(mantisContext) && props.mantisComponentType === MantisComponentType.SSLeft ? <rect} */}
+        {isSplitScreenContext(mantisContext) &&
+          (props.mantisComponentType === MantisComponentType.SSLeft
+            ? mantisContext.rightViewBBox() !== defaultViewBox() && (
+                <ViewBoxRect
+                  viewBox={mantisContext.rightViewBBox()}
+                  stroke="blue"
+                  strokeWidth={2}
+                />
+              )
+            : mantisContext.leftViewBBox() !== defaultViewBox() && (
+                <ViewBoxRect
+                  viewBox={mantisContext.leftViewBBox()}
+                  stroke="blue"
+                  strokeWidth={2}
+                />
+              ))}
         <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
       </svg>
     );

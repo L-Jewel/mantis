@@ -14,6 +14,11 @@ export enum MantisComponentType {
   SSRight,
 }
 
+export enum MantisTraversalPattern {
+  Bubble,
+  Cursor,
+}
+
 /**
  * @returns true if the component of type `type` is a part of the Split Screen
  * functionality.

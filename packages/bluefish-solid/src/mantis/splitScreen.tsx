@@ -8,6 +8,12 @@ export const SplitScreen = (
     flexDirection: "row" | "column";
   }
 ) => {
+  /**
+   * Instead of left and right, assign IDs and use a hash map
+   * viewBox = (key) => `{viewBox}`
+   * indicatorColor = (key) => `{color}`
+   */
+
   return (
     <div
       style={{
