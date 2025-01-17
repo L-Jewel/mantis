@@ -1,10 +1,14 @@
 import { ParentProps } from "solid-js";
-import { MantisComponentType, MantisProvider } from "./mantis";
+import {
+  MantisComponentType,
+  MantisProvider,
+  MantisTraversalPattern,
+} from "./mantis";
 import Bluefish from "../bluefish";
 
 export const SplitScreen = (
   props: ParentProps & {
-    enlargementFactor?: number;
+    traversalPattern?: MantisTraversalPattern;
     flexDirection: "row" | "column";
   }
 ) => {
@@ -26,13 +30,13 @@ export const SplitScreen = (
       <MantisProvider providerType="SS">
         <Bluefish
           mantisComponentType={MantisComponentType.SSLeft}
-          enlargementFactor={props.enlargementFactor}
+          mantisTraversalPattern={props.traversalPattern}
         >
           {props.children}
         </Bluefish>
         <Bluefish
           mantisComponentType={MantisComponentType.SSRight}
-          enlargementFactor={props.enlargementFactor}
+          mantisTraversalPattern={props.traversalPattern}
         >
           {props.children}
         </Bluefish>

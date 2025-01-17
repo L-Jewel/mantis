@@ -12,6 +12,8 @@ export enum MantisComponentType {
   MMMiniMap,
   SSLeft,
   SSRight,
+  LMain,
+  LLens,
 }
 
 export enum MantisTraversalPattern {
@@ -61,12 +63,13 @@ export type MantisState =
       setLeftViewBBox: Setter<string>;
       rightViewBBox: Accessor<string>;
       setRightViewBBox: Setter<string>;
-    };
+    }
+  | { type: "L" };
 
 const MantisContext = createContext<MantisState>();
 
 export const MantisProvider = (
-  props: ParentProps & { providerType: "MM" | "SS" }
+  props: ParentProps & { providerType: "MM" | "SS" | "L" }
 ) => {
   let providerState: MantisState | undefined;
 
@@ -81,7 +84,7 @@ export const MantisProvider = (
       isDragging,
       setIsDragging,
     };
-  } else {
+  } else if (props.providerType === "SS") {
     // SPLIT-SCREEN
     const [leftViewBBox, setLeftViewBBox] = createSignal(`0 0 0 0`);
     const [rightViewBBox, setRightViewBBox] = createSignal(`0 0 0 0`);
@@ -91,6 +94,11 @@ export const MantisProvider = (
       setLeftViewBBox,
       rightViewBBox,
       setRightViewBBox,
+    };
+  } else if (props.providerType === "L") {
+    // MULTI-LENS
+    providerState = {
+      type: "L",
     };
   }
 

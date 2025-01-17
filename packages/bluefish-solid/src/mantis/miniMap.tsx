@@ -1,24 +1,32 @@
 import { ParentProps } from "solid-js";
 import Bluefish from "../bluefish";
-import { MantisProvider, MantisComponentType } from "./mantis";
+import {
+  MantisProvider,
+  MantisComponentType,
+  MantisTraversalPattern,
+} from "./mantis";
 
 export const MiniMap = (
-  props: ParentProps & { enlargementFactor?: number }
+  props: ParentProps & {
+    traversalPattern?: MantisTraversalPattern;
+  }
 ) => {
+  /**
+   * check how mini-map scales stuff wheee
+   */
   return (
-    <MantisProvider providerType="MM">
-      <Bluefish
-        mantisComponentType={MantisComponentType.MMMain}
-        enlargementFactor={props.enlargementFactor ?? 1}
-      >
-        {props.children}
-      </Bluefish>
-      <Bluefish
-        mantisComponentType={MantisComponentType.MMMiniMap}
-        enlargementFactor={(props.enlargementFactor ?? 1) / 2}
-      >
-        {props.children}
-      </Bluefish>
-    </MantisProvider>
+    <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
+      <MantisProvider providerType="MM">
+        <Bluefish
+          mantisComponentType={MantisComponentType.MMMain}
+          mantisTraversalPattern={props.traversalPattern}
+        >
+          {props.children}
+        </Bluefish>
+        <Bluefish mantisComponentType={MantisComponentType.MMMiniMap}>
+          {props.children}
+        </Bluefish>
+      </MantisProvider>
+    </div>
   );
 };

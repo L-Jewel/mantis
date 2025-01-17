@@ -51,7 +51,6 @@ export type BluefishProps = ParentProps<{
   id?: string;
   debug?: boolean;
   positioning?: "absolute" | "relative";
-  enlargementFactor?: number;
   mantisComponentType: MantisComponentType;
   mantisTraversalPattern?: MantisTraversalPattern;
 }>;
@@ -370,21 +369,17 @@ export function Bluefish(props: BluefishProps) {
     const CURSOR_EPSILON = 5;
 
     // SVG View Box Information
-    const enlargementFactor = props.enlargementFactor ?? 1;
     const width = () =>
-      (props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2) *
-      enlargementFactor;
+      props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2;
     const height = () =>
-      (props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2) *
-      enlargementFactor;
+      props.height ?? (paintProps.bbox.height ?? 0) + props.padding! * 2;
     const minX = () =>
       -props.padding! +
       (props.positioning === "absolute" ? 0 : (paintProps.bbox.left ?? 0));
     const minY = () =>
       -props.padding! +
       (props.positioning === "absolute" ? 0 : (paintProps.bbox.top ?? 0));
-    const defaultViewBox = () =>
-      `${minX()} ${minY()} ${width() / enlargementFactor} ${height() / enlargementFactor}`;
+    const defaultViewBox = () => `${minX()} ${minY()} ${width()} ${height()}`;
 
     // Calculates mouse position in SVG coordinates
     // Reference: https://github.com/enxaneta/SVG-mouse-position-in-svg/blob/master/mousePositionSVG.js
@@ -392,18 +387,18 @@ export function Bluefish(props: BluefishProps) {
     const [mouseY, setMouseY] = createSignal(0);
     const [elementActive, setElementActive] = createSignal(false);
     const [mouseActive, setMouseActive] = createSignal(true);
-    function getMousePositionSVG(event: MouseEvent): void {
+    function getMousePositionSVG(point: Point): Point | undefined {
       if (svgRef) {
         let mousePoint = svgRef.createSVGPoint();
-        mousePoint.x = event.clientX;
-        mousePoint.y = event.clientY;
+        mousePoint.x = point.x; //event.clientX;
+        mousePoint.y = point.y; //event.clientY;
         const screenCTM = svgRef.getScreenCTM();
         if (screenCTM) {
           mousePoint = mousePoint.matrixTransform(screenCTM.inverse());
-          setMouseX(mousePoint.x);
-          setMouseY(mousePoint.y);
+          return { x: mousePoint.x, y: mousePoint.y };
         }
       }
+      return undefined;
     }
     function detectElementActive(event: MouseEvent): void {
       const elementUnderMouse = document.elementFromPoint(
@@ -434,8 +429,7 @@ export function Bluefish(props: BluefishProps) {
     const [rectHeight, setRectHeight] = createSignal(0);
 
     // Magnification Information (i.e. the user's view box)
-    const [magnificationFactor, setMagnificationFactor] =
-      createSignal(enlargementFactor);
+    const [magnificationFactor, setMagnificationFactor] = createSignal(1);
     const magnificationWidth = () => width() / magnificationFactor();
     const magnificationHeight = () => height() / magnificationFactor();
     const [magnificationCenterX, setMagnificationCenterX] =
@@ -502,20 +496,42 @@ export function Bluefish(props: BluefishProps) {
     // Makes the mini-map rectangle draggable
     const [dragStartX, setDragStartX] = createSignal(0);
     const [dragStartY, setDragStartY] = createSignal(0);
+    function handleMouseMove(event: MouseEvent) {
+      const mousePos = getMousePositionSVG({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      if (mousePos) {
+        setMouseX(mousePos.x);
+        setMouseY(mousePos.y);
+      }
+    }
     function handleMouseDown(event: MouseEvent) {
       if (isMiniMapContext(mantisContext)) {
-        mantisContext.setIsDragging(true);
-        setDragStartX(event.clientX / enlargementFactor - rectX());
-        setDragStartY(event.clientY / enlargementFactor - rectY());
+        const mousePos = getMousePositionSVG({
+          x: event.clientX,
+          y: event.clientY,
+        });
+        if (mousePos) {
+          mantisContext.setIsDragging(true);
+          setDragStartX(mousePos.x - rectX());
+          setDragStartY(mousePos.y - rectY());
+        }
       }
     }
     function handleDrag(event: MouseEvent) {
       if (isMiniMapContext(mantisContext) && mantisContext.isDragging()) {
-        setRectX(event.clientX / enlargementFactor - dragStartX());
-        setRectY(event.clientY / enlargementFactor - dragStartY());
-        mantisContext.setViewBBox(
-          `${rectX()} ${rectY()} ${rectWidth()} ${rectHeight()}`
-        );
+        const mousePos = getMousePositionSVG({
+          x: event.clientX,
+          y: event.clientY,
+        });
+        if (mousePos) {
+          setRectX(mousePos.x - dragStartX());
+          setRectY(mousePos.y - dragStartY());
+          mantisContext.setViewBBox(
+            `${rectX()} ${rectY()} ${rectWidth()} ${rectHeight()}`
+          );
+        }
       }
     }
     function endDrag() {
@@ -570,7 +586,7 @@ export function Bluefish(props: BluefishProps) {
         svgRef.addEventListener(
           "mousemove",
           (e) => {
-            if (mouseActive()) getMousePositionSVG(e);
+            if (mouseActive()) handleMouseMove(e);
             handleDrag(e);
           },
           false
@@ -673,7 +689,6 @@ export function Bluefish(props: BluefishProps) {
     function pointEquals(point1: Point, point2: Point): boolean {
       return point1.x === point2.x && point1.y === point2.y;
     }
-
     /**
      * @param arrowTarget the direction that the arrow is pointing
      * @param arrowStart the point where the arrow starts (i.e. tip of arrowhead)
@@ -695,6 +710,17 @@ export function Bluefish(props: BluefishProps) {
         x: arrowStart.x + (vectorX / magnitude) * arrowLength,
         y: arrowStart.y + (vectorY / magnitude) * arrowLength,
       };
+    }
+    /**
+     * @returns the % dimensions (height & width) that correspond to `component`.
+     */
+    function calculateSVGDims(component: MantisComponentType) {
+      switch (component) {
+        case MantisComponentType.MMMiniMap:
+          return "30%";
+        default:
+          return "100%";
+      }
     }
 
     const OffScreenArrow = (props: {
@@ -759,8 +785,8 @@ export function Bluefish(props: BluefishProps) {
             : {
                 x: minX(),
                 y: minY(),
-                width: width() / enlargementFactor,
-                height: height() / enlargementFactor,
+                width: width(),
+                height: height(),
               },
           vbCenterPoint()
         );
@@ -798,7 +824,24 @@ export function Bluefish(props: BluefishProps) {
     };
 
     return (
-      <svg width="100%" height="100%" viewBox={defaultViewBox()} ref={svgRef}>
+      <svg
+        style={
+          props.mantisComponentType === MantisComponentType.MMMiniMap
+            ? {
+                position: "absolute",
+                top: 0,
+                left: 0,
+                background: "rgba(255, 255, 255, 0.7)",
+                "border-right": ".2rem solid black",
+                "border-bottom": ".2rem solid black",
+              }
+            : {}
+        }
+        width={calculateSVGDims(props.mantisComponentType)}
+        height={calculateSVGDims(props.mantisComponentType)}
+        viewBox={defaultViewBox()}
+        ref={svgRef}
+      >
         {paintProps.children}
         {/* Mini-Map Rectangle */}
         {props.mantisComponentType === MantisComponentType.MMMiniMap && (
@@ -809,7 +852,7 @@ export function Bluefish(props: BluefishProps) {
             height={rectHeight()}
             fill="transparent"
             stroke="red"
-            stroke-width={10}
+            stroke-width={8}
           />
         )}
         {/* Split Screen Rectangles */}
