@@ -522,7 +522,7 @@ export function Bluefish(props: BluefishProps) {
       if (isMiniMapContext(mantisContext)) mantisContext.setIsDragging(false);
     }
 
-    // Visual Traversal Logic (Mini-Map Main + Split Screen Components)
+    // GSAP Logic (Mini-Map Main + Split Screen Components)
     createEffect(() => {
       if (svgRef) {
         if (
@@ -586,7 +586,7 @@ export function Bluefish(props: BluefishProps) {
         }
       }
     });
-    // Navigational logic
+    // Navigational Logic (Traversal Type Components)
     createEffect(() => {
       if (isTraversalType(props.mantisComponentType)) {
         if (props.mantisTraversalPattern === MantisTraversalPattern.Bubble) {
@@ -610,7 +610,6 @@ export function Bluefish(props: BluefishProps) {
               ? mouseY()
               : currY;
           });
-          // console.log(mouseX(), mouseY());
         }
         // SPLIT SCREEN - Put this component's view box into the global context.
         if (isSplitScreenContext(mantisContext)) {
@@ -656,15 +655,15 @@ export function Bluefish(props: BluefishProps) {
      * @returns the point within `viewBox` that is closest to `point`.
      */
     function closestPointInViewBox(viewBox: ViewBox, point: Point): Point {
-      const PADDING = 15;
+      const PADDING = 30;
       return {
         x: Math.max(
           viewBox.x + PADDING,
-          Math.min(point.x, viewBox.x + viewBox.width - 2 * PADDING)
+          Math.min(point.x, viewBox.x + viewBox.width - PADDING)
         ),
         y: Math.max(
           viewBox.y + PADDING,
-          Math.min(point.y, viewBox.y + viewBox.height - 2 * PADDING)
+          Math.min(point.y, viewBox.y + viewBox.height - PADDING)
         ),
       };
     }
@@ -673,22 +672,6 @@ export function Bluefish(props: BluefishProps) {
      */
     function pointEquals(point1: Point, point2: Point): boolean {
       return point1.x === point2.x && point1.y === point2.y;
-    }
-
-    /**
-     * @returns true if `viewBox1` and `viewBox2` overlap.
-     */
-    function checkViewBoxOverlap(
-      viewBox1: { x: number; y: number; width: number; height: number },
-      viewBox2: { x: number; y: number; width: number; height: number }
-    ): boolean {
-      const xOverlap =
-        viewBox1.x < viewBox2.x + viewBox2.width &&
-        viewBox1.x + viewBox1.width > viewBox2.x;
-      const yOverlap =
-        viewBox1.y < viewBox2.y + viewBox2.height &&
-        viewBox1.y + viewBox1.height > viewBox2.y;
-      return xOverlap && yOverlap;
     }
 
     /**
@@ -815,12 +798,7 @@ export function Bluefish(props: BluefishProps) {
     };
 
     return (
-      <svg
-        width={width()}
-        height={height()}
-        viewBox={defaultViewBox()}
-        ref={svgRef}
-      >
+      <svg width="100%" height="100%" viewBox={defaultViewBox()} ref={svgRef}>
         {paintProps.children}
         {/* Mini-Map Rectangle */}
         {props.mantisComponentType === MantisComponentType.MMMiniMap && (
