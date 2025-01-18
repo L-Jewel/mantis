@@ -1,10 +1,33 @@
-import { ParentProps } from "solid-js";
+import { For, ParentProps } from "solid-js";
 import {
+  isMultiLensContext,
   MantisComponentType,
   MantisProvider,
   MantisTraversalPattern,
+  useMantisProvider,
 } from "./mantis";
 import Bluefish from "../bluefish";
+
+const LensArray = (props: ParentProps) => {
+  const mantisContext = useMantisProvider();
+  const lensInfo = () =>
+    isMultiLensContext(mantisContext) ? mantisContext.lensInfo() : [];
+
+  return (
+    <For each={lensInfo()}>
+      {(_, index) => {
+        return (
+          <Bluefish
+            mantisComponentType={MantisComponentType.LLens}
+            mantisId={index()}
+          >
+            {props.children}
+          </Bluefish>
+        );
+      }}
+    </For>
+  );
+};
 
 export const MultiLens = (
   props: ParentProps & {
@@ -12,16 +35,16 @@ export const MultiLens = (
   }
 ) => {
   return (
-    <MantisProvider providerType="L">
-      <Bluefish
-        mantisComponentType={MantisComponentType.LMain}
-        mantisTraversalPattern={props.traversalPattern}
-      >
-        {props.children}
-      </Bluefish>
-      <Bluefish mantisComponentType={MantisComponentType.LLens}>
-        {props.children}
-      </Bluefish>
-    </MantisProvider>
+    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
+      <MantisProvider providerType="L">
+        <Bluefish
+          mantisComponentType={MantisComponentType.LMain}
+          mantisTraversalPattern={props.traversalPattern}
+        >
+          {props.children}
+        </Bluefish>
+        <LensArray>{props.children}</LensArray>
+      </MantisProvider>
+    </div>
   );
 };

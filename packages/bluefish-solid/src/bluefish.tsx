@@ -35,10 +35,13 @@ import toast, { Toaster } from "solid-toast";
 import gsap from "gsap";
 import * as d3 from "d3";
 import {
+  isDraggableType,
   isMiniMapContext,
+  isMultiLensContext,
   isSplitScreenContext,
   isSplitScreenType,
   isTraversalType,
+  LLensInfo,
   MantisComponentType,
   MantisTraversalPattern,
   useMantisProvider,
@@ -53,6 +56,7 @@ export type BluefishProps = ParentProps<{
   positioning?: "absolute" | "relative";
   mantisComponentType: MantisComponentType;
   mantisTraversalPattern?: MantisTraversalPattern;
+  mantisId?: number;
 }>;
 type BluefishNodeType = {
   type: "node";
@@ -400,6 +404,15 @@ export function Bluefish(props: BluefishProps) {
       }
       return undefined;
     }
+    function zoomAroundPoint(point: Point, zoomLevel: number) {
+      setMagnificationFactor(zoomLevel);
+      const newCenterX =
+        point.x - (point.x - minX()) / zoomLevel + magnificationWidth() / 2;
+      const newCenterY =
+        point.y - (point.y - minY()) / zoomLevel + magnificationHeight() / 2;
+      setMagnificationCenterX(newCenterX);
+      setMagnificationCenterY(newCenterY);
+    }
     function detectElementActive(event: MouseEvent): void {
       const elementUnderMouse = document.elementFromPoint(
         event.clientX,
@@ -496,6 +509,7 @@ export function Bluefish(props: BluefishProps) {
     // Makes the mini-map rectangle draggable
     const [dragStartX, setDragStartX] = createSignal(0);
     const [dragStartY, setDragStartY] = createSignal(0);
+    const [isDragging, setIsDragging] = createSignal(false);
     function handleMouseMove(event: MouseEvent) {
       const mousePos = getMousePositionSVG({
         x: event.clientX,
@@ -507,35 +521,105 @@ export function Bluefish(props: BluefishProps) {
       }
     }
     function handleMouseDown(event: MouseEvent) {
+      const mousePos = getMousePositionSVG({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      if (!mousePos) return;
       if (isMiniMapContext(mantisContext)) {
-        const mousePos = getMousePositionSVG({
-          x: event.clientX,
-          y: event.clientY,
-        });
-        if (mousePos) {
-          mantisContext.setIsDragging(true);
-          setDragStartX(mousePos.x - rectX());
-          setDragStartY(mousePos.y - rectY());
-        }
+        mantisContext.setIsDragging(true);
+        setDragStartX(mousePos.x - rectX());
+        setDragStartY(mousePos.y - rectY());
+      } else if (
+        isMultiLensContext(mantisContext) &&
+        props.mantisId !== undefined
+      ) {
+        const prevLensInfo = mantisContext.lensInfo()[props.mantisId];
+        setDragStartX(mousePos.x - prevLensInfo.x);
+        setDragStartY(mousePos.y - prevLensInfo.y);
+        // setDragStartX(mousePos.x - magnificationCenterX());
+        // setDragStartY(mousePos.x - magnificationCenterY());
+        setIsDragging(true);
+        console.log("start drag!");
       }
     }
     function handleDrag(event: MouseEvent) {
+      console.log("handling!");
+      const mousePos = getMousePositionSVG({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      if (!mousePos) return;
       if (isMiniMapContext(mantisContext) && mantisContext.isDragging()) {
-        const mousePos = getMousePositionSVG({
-          x: event.clientX,
-          y: event.clientY,
-        });
-        if (mousePos) {
-          setRectX(mousePos.x - dragStartX());
-          setRectY(mousePos.y - dragStartY());
-          mantisContext.setViewBBox(
-            `${rectX()} ${rectY()} ${rectWidth()} ${rectHeight()}`
-          );
-        }
+        setRectX(mousePos.x - dragStartX());
+        setRectY(mousePos.y - dragStartY());
+        mantisContext.setViewBBox(
+          `${rectX()} ${rectY()} ${rectWidth()} ${rectHeight()}`
+        );
+      } else if (
+        isMultiLensContext(mantisContext) &&
+        props.mantisId !== undefined
+      ) {
+        // zoomAroundPoint(
+        //   { x: mousePos.x + dragStartX(), y: mousePos.y + dragStartY() },
+        //   magnificationFactor()
+        // );
+        mantisContext.updateLensInfo((prevList) =>
+          prevList.map((item, i) =>
+            i === props.mantisId
+              ? {
+                  ...item,
+                  x: mousePos.x - dragStartX(),
+                  y: mousePos.y - dragStartY(),
+                }
+              : item
+          )
+        );
+        console.log(
+          "draggin!",
+          mousePos,
+          dragStartX(),
+          dragStartY(),
+          mantisContext.lensInfo()
+        );
+        // setMagnificationCenterX(mousePos.x - dragStartX());
+        // setMagnificationCenterY(mousePos.y - dragStartY());
       }
     }
-    function endDrag() {
+    function endDrag(event: MouseEvent) {
+      console.log("end drag!");
       if (isMiniMapContext(mantisContext)) mantisContext.setIsDragging(false);
+      else if (isMultiLensContext(mantisContext)) {
+        // mantisContext.updateLensInfo((prevInfo) => {
+        //   const mousePos = getMousePositionSVG({
+        //     x: event.clientX,
+        //     y: event.clientY,
+        //   });
+        //   if (props.mantisId !== undefined && mousePos) {
+        //     const prevObj = prevInfo[props.mantisId];
+        //     prevInfo[props.mantisId] = {
+        //       x: mousePos.x - dragStartX(),
+        //       y: mousePos.y - dragStartY(),
+        //       magnification: prevObj.magnification,
+        //     };
+        //   }
+        //   return prevInfo;
+        // });
+        setIsDragging(false);
+      }
+    }
+    function handleRightClick(event: MouseEvent) {
+      const mousePos = getMousePositionSVG({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      if (mousePos && isMultiLensContext(mantisContext)) {
+        event.preventDefault();
+        mantisContext.updateLensInfo((prevInfo) => [
+          ...prevInfo,
+          { x: mousePos.x, y: mousePos.y, magnification: 2 },
+        ]);
+      }
     }
 
     // GSAP Logic (Mini-Map Main + Split Screen Components)
@@ -562,6 +646,22 @@ export function Bluefish(props: BluefishProps) {
             });
           }
         }
+      }
+    });
+
+    // Fixed Positioning (Multi-Lens Lens Component)
+    createEffect(() => {
+      if (
+        svgRef &&
+        isMultiLensContext(mantisContext) &&
+        props.mantisComponentType === MantisComponentType.LLens &&
+        props.mantisId !== undefined
+      ) {
+        const currLensInfo = mantisContext.lensInfo()[props.mantisId];
+        zoomAroundPoint(
+          { x: currLensInfo.x, y: currLensInfo.y },
+          currLensInfo.magnification
+        );
       }
     });
 
@@ -594,11 +694,12 @@ export function Bluefish(props: BluefishProps) {
         if (isTraversalType(props.mantisComponentType)) {
           svgRef.addEventListener("click", zoomInNode, false);
           svgRef.addEventListener("wheel", handleScroll, false);
-        }
-        if (props.mantisComponentType === MantisComponentType.MMMiniMap) {
+        } else if (isDraggableType(props.mantisComponentType)) {
           svgRef.addEventListener("mousedown", handleMouseDown, false);
           svgRef.addEventListener("mouseup", endDrag, false);
           svgRef.addEventListener("mouseleave", endDrag, false);
+        } else if (props.mantisComponentType === MantisComponentType.LMain) {
+          svgRef.addEventListener("contextmenu", handleRightClick, false);
         }
       }
     });
@@ -722,6 +823,34 @@ export function Bluefish(props: BluefishProps) {
           return "100%";
       }
     }
+    /**
+     * @returns a CSS properties object to style the SVG based on `component`.
+     */
+    function determineCSSStyle(
+      component: MantisComponentType
+    ): JSX.CSSProperties {
+      switch (component) {
+        case MantisComponentType.MMMiniMap:
+          return {
+            position: "absolute",
+            top: 0,
+            left: 0,
+            background: "rgba(255, 255, 255, 0.7)",
+            "border-right": ".2rem solid black",
+            "border-bottom": ".2rem solid black",
+          };
+        case MantisComponentType.LLens: {
+          return {
+            position: "absolute",
+            top: 0,
+            left: 0,
+            "pointer-events": "none",
+          };
+        }
+        default:
+          return {};
+      }
+    }
 
     const OffScreenArrow = (props: {
       arrowStart: Point;
@@ -755,7 +884,6 @@ export function Bluefish(props: BluefishProps) {
         </>
       );
     };
-
     const ViewBoxRect = (props: {
       viewBox: string | undefined;
       stroke?: string;
@@ -822,57 +950,106 @@ export function Bluefish(props: BluefishProps) {
         </>
       );
     };
+    const LensClipPath = (
+      props: ParentProps & { id: number; lensInfo: LLensInfo }
+    ) => {
+      const LENS_RADIUS = "7%";
+      const lensID = () => `lensClip-${props.id}`;
+      return (
+        <>
+          <defs>
+            <clipPath id={lensID()}>
+              <circle
+                cx={props.lensInfo.x}
+                cy={props.lensInfo.y}
+                r={LENS_RADIUS}
+              />
+            </clipPath>
+          </defs>
+          <g
+            clip-path={`url(#${lensID()})`}
+            style={{ "pointer-events": "auto" }}
+          >
+            <circle
+              cx={props.lensInfo.x}
+              cy={props.lensInfo.y}
+              r={LENS_RADIUS}
+              fill="white"
+            />
+            {props.children}
+            <circle
+              cx={props.lensInfo.x}
+              cy={props.lensInfo.y}
+              r={LENS_RADIUS}
+              stroke="black"
+              stroke-width={4}
+              fill="transparent"
+            />
+          </g>
+        </>
+      );
+    };
 
     return (
       <svg
-        style={
-          props.mantisComponentType === MantisComponentType.MMMiniMap
-            ? {
-                position: "absolute",
-                top: 0,
-                left: 0,
-                background: "rgba(255, 255, 255, 0.7)",
-                "border-right": ".2rem solid black",
-                "border-bottom": ".2rem solid black",
-              }
-            : {}
-        }
+        style={determineCSSStyle(props.mantisComponentType)}
         width={calculateSVGDims(props.mantisComponentType)}
         height={calculateSVGDims(props.mantisComponentType)}
-        viewBox={defaultViewBox()}
+        viewBox={
+          props.mantisComponentType === MantisComponentType.LLens
+            ? magnificationViewBox()
+            : defaultViewBox()
+        }
         ref={svgRef}
       >
-        {paintProps.children}
-        {/* Mini-Map Rectangle */}
-        {props.mantisComponentType === MantisComponentType.MMMiniMap && (
-          <rect
-            x={rectX()}
-            y={rectY()}
-            width={rectWidth()}
-            height={rectHeight()}
-            fill="transparent"
-            stroke="red"
-            stroke-width={8}
-          />
+        {props.mantisComponentType === MantisComponentType.LLens ? (
+          <>
+            {isMultiLensContext(mantisContext) &&
+              props.mantisId !== undefined && (
+                <LensClipPath
+                  id={props.mantisId}
+                  lensInfo={mantisContext.lensInfo()[props.mantisId]}
+                >
+                  {paintProps.children}
+                </LensClipPath>
+              )}
+          </>
+        ) : (
+          <>
+            {paintProps.children}
+            {/* Mini-Map Rectangle */}
+            {props.mantisComponentType === MantisComponentType.MMMiniMap && (
+              <rect
+                x={rectX()}
+                y={rectY()}
+                width={rectWidth()}
+                height={rectHeight()}
+                fill="transparent"
+                stroke="red"
+                stroke-width={8}
+              />
+            )}
+            {/* Split Screen Rectangles */}
+            {isSplitScreenContext(mantisContext) &&
+              (props.mantisComponentType === MantisComponentType.SSLeft
+                ? mantisContext.rightViewBBox() !== defaultViewBox() && (
+                    <ViewBoxRect
+                      viewBox={mantisContext.rightViewBBox()}
+                      stroke="blue"
+                      strokeWidth={2}
+                    />
+                  )
+                : mantisContext.leftViewBBox() !== defaultViewBox() && (
+                    <ViewBoxRect
+                      viewBox={mantisContext.leftViewBBox()}
+                      stroke="blue"
+                      strokeWidth={2}
+                    />
+                  ))}
+            {/* Cursor Position */}
+            <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
+          </>
         )}
-        {/* Split Screen Rectangles */}
-        {isSplitScreenContext(mantisContext) &&
-          (props.mantisComponentType === MantisComponentType.SSLeft
-            ? mantisContext.rightViewBBox() !== defaultViewBox() && (
-                <ViewBoxRect
-                  viewBox={mantisContext.rightViewBBox()}
-                  stroke="blue"
-                  strokeWidth={2}
-                />
-              )
-            : mantisContext.leftViewBBox() !== defaultViewBox() && (
-                <ViewBoxRect
-                  viewBox={mantisContext.leftViewBBox()}
-                  stroke="blue"
-                  strokeWidth={2}
-                />
-              ))}
-        <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
       </svg>
     );
   };

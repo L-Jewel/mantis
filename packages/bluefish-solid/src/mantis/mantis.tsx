@@ -15,7 +15,6 @@ export enum MantisComponentType {
   LMain,
   LLens,
 }
-
 export enum MantisTraversalPattern {
   Bubble,
   Cursor,
@@ -40,15 +39,23 @@ export function isSplitScreenType(type: MantisComponentType) {
 export function isTraversalType(type: MantisComponentType) {
   return type === MantisComponentType.MMMain || isSplitScreenType(type);
 }
+export function isDraggableType(type: MantisComponentType) {
+  return (
+    type === MantisComponentType.MMMiniMap || type === MantisComponentType.LLens
+  );
+}
 
 export function isMiniMapContext(context: MantisState | undefined) {
   return context?.type === "MM";
 }
-
 export function isSplitScreenContext(context: MantisState | undefined) {
   return context?.type === "SS";
 }
+export function isMultiLensContext(context: MantisState | undefined) {
+  return context?.type === "L";
+}
 
+export type LLensInfo = { x: number; y: number; magnification: number };
 export type MantisState =
   | {
       type: "MM";
@@ -64,7 +71,11 @@ export type MantisState =
       rightViewBBox: Accessor<string>;
       setRightViewBBox: Setter<string>;
     }
-  | { type: "L" };
+  | {
+      type: "L";
+      lensInfo: Accessor<LLensInfo[]>;
+      updateLensInfo: Setter<LLensInfo[]>;
+    };
 
 const MantisContext = createContext<MantisState>();
 
@@ -97,8 +108,11 @@ export const MantisProvider = (
     };
   } else if (props.providerType === "L") {
     // MULTI-LENS
+    const [lensInfo, updateLensInfo] = createSignal<LLensInfo[]>([]);
     providerState = {
       type: "L",
+      lensInfo,
+      updateLensInfo,
     };
   }
 
