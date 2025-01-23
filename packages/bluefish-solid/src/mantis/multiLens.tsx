@@ -1,4 +1,4 @@
-import { For, ParentProps } from "solid-js";
+import { For, Index, ParentProps } from "solid-js";
 import {
   isMultiLensContext,
   MantisComponentType,
@@ -14,18 +14,18 @@ const LensArray = (props: ParentProps) => {
     isMultiLensContext(mantisContext) ? mantisContext.lensInfo() : [];
 
   return (
-    <For each={lensInfo()}>
+    <Index each={lensInfo()}>
       {(_, index) => {
         return (
           <Bluefish
             mantisComponentType={MantisComponentType.LLens}
-            mantisId={index()}
+            mantisId={index}
           >
             {props.children}
           </Bluefish>
         );
       }}
-    </For>
+    </Index>
   );
 };
 

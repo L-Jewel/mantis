@@ -24,6 +24,7 @@ import {
   createSignal,
   createUniqueId,
   mergeProps,
+  onMount,
   untrack,
 } from "solid-js";
 import { ParentScopeIdContext, Scope, ScopeContext } from "./createName";
@@ -371,6 +372,7 @@ export function Bluefish(props: BluefishProps) {
         : 1.25;
     const SCROLL_DELTA = 0.4;
     const CURSOR_EPSILON = 5;
+    const MAGNIFICATION_DEFAULT = 2;
 
     // SVG View Box Information
     const width = () =>
@@ -404,6 +406,10 @@ export function Bluefish(props: BluefishProps) {
       }
       return undefined;
     }
+    /**
+     * Zooms the SVG to `zoomLevel`, but with the focal point at
+     * `point` rather than the center of the view.
+     */
     function zoomAroundPoint(point: Point, zoomLevel: number) {
       setMagnificationFactor(zoomLevel);
       const newCenterX =
@@ -436,6 +442,7 @@ export function Bluefish(props: BluefishProps) {
     const selNodeCenterY = () => selNodeY() + selNodeHeight() / 2;
 
     // Red Box Information
+    // Honestly just a misc signal used for different things in each component.
     const [rectX, setRectX] = createSignal(0);
     const [rectY, setRectY] = createSignal(0);
     const [rectWidth, setRectWidth] = createSignal(0);
@@ -492,7 +499,8 @@ export function Bluefish(props: BluefishProps) {
       );
       if (
         elementUnderMouse &&
-        isZoomed() &&
+        (isZoomed() ||
+          props.mantisComponentType === MantisComponentType.LLens) &&
         svgRef &&
         svgRef.contains(elementUnderMouse)
       ) {
@@ -537,14 +545,10 @@ export function Bluefish(props: BluefishProps) {
         const prevLensInfo = mantisContext.lensInfo()[props.mantisId];
         setDragStartX(mousePos.x - prevLensInfo.x);
         setDragStartY(mousePos.y - prevLensInfo.y);
-        // setDragStartX(mousePos.x - magnificationCenterX());
-        // setDragStartY(mousePos.x - magnificationCenterY());
         setIsDragging(true);
-        console.log("start drag!");
       }
     }
     function handleDrag(event: MouseEvent) {
-      console.log("handling!");
       const mousePos = getMousePositionSVG({
         x: event.clientX,
         y: event.clientY,
@@ -558,57 +562,31 @@ export function Bluefish(props: BluefishProps) {
         );
       } else if (
         isMultiLensContext(mantisContext) &&
-        props.mantisId !== undefined
+        props.mantisId !== undefined &&
+        isDragging()
       ) {
-        // zoomAroundPoint(
-        //   { x: mousePos.x + dragStartX(), y: mousePos.y + dragStartY() },
-        //   magnificationFactor()
-        // );
-        mantisContext.updateLensInfo((prevList) =>
-          prevList.map((item, i) =>
-            i === props.mantisId
-              ? {
-                  ...item,
-                  x: mousePos.x - dragStartX(),
-                  y: mousePos.y - dragStartY(),
-                }
-              : item
-          )
-        );
-        console.log(
-          "draggin!",
-          mousePos,
-          dragStartX(),
-          dragStartY(),
-          mantisContext.lensInfo()
-        );
-        // setMagnificationCenterX(mousePos.x - dragStartX());
-        // setMagnificationCenterY(mousePos.y - dragStartY());
+        setRectX(mousePos.x - dragStartX());
+        setRectY(mousePos.y - dragStartY());
       }
     }
-    function endDrag(event: MouseEvent) {
-      console.log("end drag!");
+    function endDrag() {
+      setIsDragging(false);
       if (isMiniMapContext(mantisContext)) mantisContext.setIsDragging(false);
       else if (isMultiLensContext(mantisContext)) {
-        // mantisContext.updateLensInfo((prevInfo) => {
-        //   const mousePos = getMousePositionSVG({
-        //     x: event.clientX,
-        //     y: event.clientY,
-        //   });
-        //   if (props.mantisId !== undefined && mousePos) {
-        //     const prevObj = prevInfo[props.mantisId];
-        //     prevInfo[props.mantisId] = {
-        //       x: mousePos.x - dragStartX(),
-        //       y: mousePos.y - dragStartY(),
-        //       magnification: prevObj.magnification,
-        //     };
-        //   }
-        //   return prevInfo;
-        // });
+        // TODO - Reactivity error? It works anyway so I will leave it for now.
+        mantisContext.updateLensInfo((prevList) =>
+          prevList.map((item, i) =>
+            i === props.mantisId ? { ...item, x: rectX(), y: rectY() } : item
+          )
+        );
         setIsDragging(false);
       }
     }
-    function handleRightClick(event: MouseEvent) {
+
+    /**
+     * For the multi-lens component, add a lens centered around the mouse location.
+     */
+    function addLens(event: MouseEvent) {
       const mousePos = getMousePositionSVG({
         x: event.clientX,
         y: event.clientY,
@@ -617,7 +595,11 @@ export function Bluefish(props: BluefishProps) {
         event.preventDefault();
         mantisContext.updateLensInfo((prevInfo) => [
           ...prevInfo,
-          { x: mousePos.x, y: mousePos.y, magnification: 2 },
+          {
+            x: mousePos.x,
+            y: mousePos.y,
+            magnification: MAGNIFICATION_DEFAULT,
+          },
         ]);
       }
     }
@@ -651,22 +633,14 @@ export function Bluefish(props: BluefishProps) {
 
     // Fixed Positioning (Multi-Lens Lens Component)
     createEffect(() => {
-      if (
-        svgRef &&
-        isMultiLensContext(mantisContext) &&
-        props.mantisComponentType === MantisComponentType.LLens &&
-        props.mantisId !== undefined
-      ) {
-        const currLensInfo = mantisContext.lensInfo()[props.mantisId];
-        zoomAroundPoint(
-          { x: currLensInfo.x, y: currLensInfo.y },
-          currLensInfo.magnification
-        );
+      if (props.mantisComponentType === MantisComponentType.LLens) {
+        zoomAroundPoint({ x: rectX(), y: rectY() }, magnificationFactor());
       }
     });
 
     // SVG Event Listeners
     /**
+     * Handles the "keydown" event.
      * When the 'f' key is pressed, toggle whether or not the mouse is frozen on the
      * main SVG.
      */
@@ -677,6 +651,12 @@ export function Bluefish(props: BluefishProps) {
         event.key === "f"
       ) {
         setMouseActive(!mouseActive());
+      } else if (
+        elementActive() &&
+        props.mantisComponentType === MantisComponentType.LLens &&
+        event.key === "r"
+      ) {
+        setMagnificationFactor(MAGNIFICATION_DEFAULT);
       }
     }
     createEffect(() => {
@@ -698,11 +678,23 @@ export function Bluefish(props: BluefishProps) {
           svgRef.addEventListener("mousedown", handleMouseDown, false);
           svgRef.addEventListener("mouseup", endDrag, false);
           svgRef.addEventListener("mouseleave", endDrag, false);
+          if (props.mantisComponentType === MantisComponentType.LLens) {
+            svgRef.addEventListener("wheel", handleScroll, false);
+          }
         } else if (props.mantisComponentType === MantisComponentType.LMain) {
-          svgRef.addEventListener("contextmenu", handleRightClick, false);
+          svgRef.addEventListener(
+            "click",
+            (event) => {
+              if (event.shiftKey) {
+                addLens(event);
+              }
+            },
+            false
+          );
         }
       }
     });
+
     // Navigational Logic (Traversal Type Components)
     createEffect(() => {
       if (isTraversalType(props.mantisComponentType)) {
@@ -953,38 +945,65 @@ export function Bluefish(props: BluefishProps) {
     const LensClipPath = (
       props: ParentProps & { id: number; lensInfo: LLensInfo }
     ) => {
-      const LENS_RADIUS = "7%";
+      const STROKE_WIDTH_VAL = 8;
+      const LENS_RADIUS_VAL = 12 * MAGNIFICATION_DEFAULT;
+      const LENS_RADIUS = () =>
+        `${LENS_RADIUS_VAL / magnificationFactor()}vmin`;
       const lensID = () => `lensClip-${props.id}`;
+
+      // On mount, set the initial conditions of the lens component.
+      onMount(() => {
+        setRectX(props.lensInfo.x);
+        setRectY(props.lensInfo.y);
+        zoomAroundPoint(
+          { x: rectX(), y: rectY() },
+          props.lensInfo.magnification
+        );
+      });
+
       return (
         <>
           <defs>
             <clipPath id={lensID()}>
-              <circle
-                cx={props.lensInfo.x}
-                cy={props.lensInfo.y}
-                r={LENS_RADIUS}
-              />
+              <circle cx={rectX()} cy={rectY()} r={LENS_RADIUS()} />
+              {/* <rect
+                x={`calc(${rectX()}px - ${LENS_RADIUS()})`}
+                y={`calc(${rectY()}px - ${LENS_RADIUS()} / 3 * 2)`}
+                width={`calc(${LENS_RADIUS()} * 2)`}
+                height={`calc(${LENS_RADIUS()} * 4 / 3)`}
+              /> */}
             </clipPath>
           </defs>
           <g
             clip-path={`url(#${lensID()})`}
             style={{ "pointer-events": "auto" }}
           >
-            <circle
-              cx={props.lensInfo.x}
-              cy={props.lensInfo.y}
-              r={LENS_RADIUS}
+            <circle cx={rectX()} cy={rectY()} r={LENS_RADIUS()} fill="white" />
+            {/* <rect
+              x={`calc(${rectX()}px - ${LENS_RADIUS()})`}
+              y={`calc(${rectY()}px - ${LENS_RADIUS()} / 3 * 2)`}
+              width={`calc(${LENS_RADIUS()} * 2)`}
+              height={`calc(${LENS_RADIUS()} * 4 / 3)`}
               fill="white"
-            />
+            /> */}
             {props.children}
             <circle
-              cx={props.lensInfo.x}
-              cy={props.lensInfo.y}
-              r={LENS_RADIUS}
+              cx={rectX()}
+              cy={rectY()}
+              r={LENS_RADIUS()}
               stroke="black"
-              stroke-width={4}
+              stroke-width={STROKE_WIDTH_VAL / magnificationFactor()}
               fill="transparent"
             />
+            {/* <rect
+              x={`calc(${rectX()}px - ${LENS_RADIUS()})`}
+              y={`calc(${rectY()}px - ${LENS_RADIUS()} / 3 * 2)`}
+              width={`calc(${LENS_RADIUS()} * 2)`}
+              height={`calc(${LENS_RADIUS()} * 4 / 3)`}
+              stroke="black"
+              stroke-width={STROKE_WIDTH_VAL / magnificationFactor()}
+              fill="transparent"
+            /> */}
           </g>
         </>
       );
