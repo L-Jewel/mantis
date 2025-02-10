@@ -15,11 +15,13 @@ import {
 } from "./scenegraph";
 import {
   Accessor,
+  For,
   JSX,
   ParentProps,
   Show,
   createContext,
   createEffect,
+  createMemo,
   createRenderEffect,
   createSignal,
   createUniqueId,
@@ -174,7 +176,7 @@ export function Bluefish(props: BluefishProps) {
    * @param nodeId a string that corresponds to the ID of a node in the scenegraph
    * @returns the node's transform/bbox offset.
    */
-  function calculateTransform(nodeId: string): { x: number; y: number } {
+  function calculateTransform(nodeId: string): Point {
     const currNode = scenegraphSignal().scenegraph[nodeId];
 
     if (!currNode || !currNode.parent) {
@@ -277,6 +279,71 @@ export function Bluefish(props: BluefishProps) {
       return node.bbox;
     } else {
       return getBbox(node.refId);
+    }
+  }
+  function calculateTransformedBboxXY(nodeId: string): Point {
+    const nodeBbox = getBbox(nodeId);
+    const nodeTransform = calculateTransform(resolveNode(nodeId));
+    return {
+      x: nodeTransform.x + (nodeBbox.left ?? 0),
+      y: nodeTransform.y + (nodeBbox.top ?? 0),
+    };
+  }
+  /**
+   * Determines if two SVG view boxes overlap.
+   *
+   * @param viewBox1 - The first viewBox as a string in the format "x y width height".
+   * @param viewBox2 - The second viewBox as a string in the format "x y width height".
+   * @returns A boolean indicating whether the two viewBoxes overlap.
+   */
+  function viewBoxOverlaps(viewBox1: string, viewBox2: string): boolean {
+    const [x1, y1, w1, h1] = viewBox1.split(" ").map(Number);
+    const [x2, y2, w2, h2] = viewBox2.split(" ").map(Number);
+    return !(x1 + w1 < x2 || x2 + w2 < x1 || y1 + h1 < y2 || y2 + h2 < y1);
+  }
+  /**
+   * @returns true if `point1` is in the same place as `point2`
+   */
+  function pointEquals(point1: Point, point2: Point): boolean {
+    return point1.x === point2.x && point1.y === point2.y;
+  }
+  /**
+   * @returns the % dimensions (height & width) that correspond to `component`.
+   */
+  function calculateSVGDims(component: MantisComponentType) {
+    switch (component) {
+      case MantisComponentType.MMMiniMap:
+        return "30%";
+      default:
+        return "100%";
+    }
+  }
+  /**
+   * @returns a CSS properties object to style the SVG based on `component`.
+   */
+  function determineCSSStyle(
+    component: MantisComponentType
+  ): JSX.CSSProperties {
+    switch (component) {
+      case MantisComponentType.MMMiniMap:
+        return {
+          position: "absolute",
+          top: 0,
+          left: 0,
+          background: "rgba(255, 255, 255, 0.7)",
+          "border-right": ".2rem solid black",
+          "border-bottom": ".2rem solid black",
+        };
+      case MantisComponentType.LLens: {
+        return {
+          position: "absolute",
+          top: 0,
+          left: 0,
+          "pointer-events": "none",
+        };
+      }
+      default:
+        return {};
     }
   }
 
@@ -396,8 +463,8 @@ export function Bluefish(props: BluefishProps) {
     function getMousePositionSVG(point: Point): Point | undefined {
       if (svgRef) {
         let mousePoint = svgRef.createSVGPoint();
-        mousePoint.x = point.x; //event.clientX;
-        mousePoint.y = point.y; //event.clientY;
+        mousePoint.x = point.x;
+        mousePoint.y = point.y;
         const screenCTM = svgRef.getScreenCTM();
         if (screenCTM) {
           mousePoint = mousePoint.matrixTransform(screenCTM.inverse());
@@ -462,6 +529,16 @@ export function Bluefish(props: BluefishProps) {
       magnificationCenterY() - magnificationHeight() / 2;
     const magnificationViewBox = () =>
       `${magnificationX()} ${magnificationY()} ${magnificationWidth()} ${magnificationHeight()}`;
+    // Keeps track of the user's view box (during GSAP transitions).
+    const [gsapCenterX, setGsapCenterX] = createSignal(selNodeCenterX());
+    const [gsapCenterY, setGsapCenterY] = createSignal(selNodeCenterY());
+    const updateGSAPCenter = () => {
+      if (svgRef) {
+        const viewBox = svgRef.getAttribute("viewBox")?.split(" ");
+        setGsapCenterX(parseFloat(viewBox![0]) + parseFloat(viewBox![2]) / 2);
+        setGsapCenterY(parseFloat(viewBox![1]) + parseFloat(viewBox![3]) / 2);
+      }
+    };
 
     // Voronoi Calculation
     // TODO - For performance, maybe only calculate this for certain component types
@@ -471,6 +548,8 @@ export function Bluefish(props: BluefishProps) {
         (d) => d.x,
         (d) => d.y
       );
+    const voronoi = () =>
+      delaunay().voronoi([minX(), minY(), minX() + width(), minY() + height()]);
 
     // VISUAL LOGIC
     // Handles zoom-related functionalities
@@ -625,6 +704,7 @@ export function Bluefish(props: BluefishProps) {
             gsap.to(svgRef, {
               attr: { viewBox: magnificationViewBox() },
               duration: GSAP_DURATION,
+              onUpdate: updateGSAPCenter,
             });
           }
         }
@@ -705,9 +785,15 @@ export function Bluefish(props: BluefishProps) {
             pointToString(midpoints()[closestPoint])
           );
           setCurrentNodeId(resolveNode(closestNode ?? id));
+          console.log(currentNodeId());
           // Update the user's view to center around that node.
           setMagnificationCenterX(selNodeCenterX());
           setMagnificationCenterY(selNodeCenterY());
+
+          setRectX(selNodeX());
+          setRectY(selNodeY());
+          setRectHeight(selNodeHeight());
+          setRectWidth(selNodeWidth());
         } else {
           setMagnificationCenterX((currX: number) => {
             return Math.abs(currX - mouseX()) > CURSOR_EPSILON
@@ -760,120 +846,82 @@ export function Bluefish(props: BluefishProps) {
     });
 
     // HELPER FUNCTIONS
-    /**
-     * @returns the point within `viewBox` that is closest to `point`.
-     */
-    function closestPointInViewBox(viewBox: ViewBox, point: Point): Point {
-      const PADDING = 30;
-      return {
-        x: Math.max(
-          viewBox.x + PADDING,
-          Math.min(point.x, viewBox.x + viewBox.width - PADDING)
-        ),
-        y: Math.max(
-          viewBox.y + PADDING,
-          Math.min(point.y, viewBox.y + viewBox.height - PADDING)
-        ),
-      };
-    }
-    /**
-     * @returns true if `point1` is in the same place as `point2`
-     */
-    function pointEquals(point1: Point, point2: Point): boolean {
-      return point1.x === point2.x && point1.y === point2.y;
-    }
-    /**
-     * @param arrowTarget the direction that the arrow is pointing
-     * @param arrowStart the point where the arrow starts (i.e. tip of arrowhead)
-     * @param arrowLength length of the arrow
-     * @returns where the arrow should end for the inputted parameters to be true.
-     */
-    function calculateArrowEnd(
-      arrowTarget: Point,
-      arrowStart: Point,
-      arrowLength: number
-    ): { x: number; y: number } {
-      const vectorX = arrowStart.x - arrowTarget.x;
-      const vectorY = arrowStart.y - arrowTarget.y;
-      const magnitude = Math.sqrt(Math.pow(vectorX, 2) + Math.pow(vectorY, 2));
-      if (magnitude === 0) {
-        return arrowStart;
-      }
-      return {
-        x: arrowStart.x + (vectorX / magnitude) * arrowLength,
-        y: arrowStart.y + (vectorY / magnitude) * arrowLength,
-      };
-    }
-    /**
-     * @returns the % dimensions (height & width) that correspond to `component`.
-     */
-    function calculateSVGDims(component: MantisComponentType) {
-      switch (component) {
-        case MantisComponentType.MMMiniMap:
-          return "30%";
-        default:
-          return "100%";
-      }
-    }
-    /**
-     * @returns a CSS properties object to style the SVG based on `component`.
-     */
-    function determineCSSStyle(
-      component: MantisComponentType
-    ): JSX.CSSProperties {
-      switch (component) {
-        case MantisComponentType.MMMiniMap:
-          return {
-            position: "absolute",
-            top: 0,
-            left: 0,
-            background: "rgba(255, 255, 255, 0.7)",
-            "border-right": ".2rem solid black",
-            "border-bottom": ".2rem solid black",
-          };
-        case MantisComponentType.LLens: {
-          return {
-            position: "absolute",
-            top: 0,
-            left: 0,
-            "pointer-events": "none",
-          };
-        }
-        default:
-          return {};
-      }
-    }
+    const OffScreenArrow = (props: { targetPoint: Point }) => {
+      // CONSTANTS
+      const arrowheadColor = "purple";
 
-    const OffScreenArrow = (props: {
-      arrowStart: Point;
-      arrowEnd: Point;
-      arrowLength: number;
-      arrowColor: string;
-    }) => {
+      // Calculate the direction vector from the center of the magnification view box to the `targetPoint`.
+      const directionVector = createMemo(() => {
+        return {
+          x: props.targetPoint.x - gsapCenterX(),
+          y: props.targetPoint.y - gsapCenterY(),
+        };
+      });
+      const directionVectorMagnitude = createMemo(() =>
+        Math.sqrt(directionVector().x ** 2 + directionVector().y ** 2)
+      );
+      const normalizedDirectionVector = createMemo(() => {
+        return {
+          x: directionVector().x / directionVectorMagnitude(),
+          y: directionVector().y / directionVectorMagnitude(),
+        };
+      });
+
+      // Scale the dimensions of the arrowhead by the `magnificationFactor`.
+      const arrowLength = () => 30 / magnificationFactor(); // Length of the arrowhead
+      const arrowBaseWidth = () => 15 / magnificationFactor(); // Width of the arrowhead base
+      const arrowPadding = () => 0.5 / magnificationFactor(); // Padding between the arrow and the edge of the view box
+      const notchDepth = () => 12 / magnificationFactor(); // Depth of the arrowhead notch
+      const arrowCenter = createMemo(() => {
+        return {
+          x:
+            gsapCenterX() +
+            normalizedDirectionVector().x *
+              (magnificationWidth() / 2 - arrowPadding()),
+          y:
+            gsapCenterY() +
+            normalizedDirectionVector().y *
+              (magnificationHeight() / 2 - arrowPadding()),
+        };
+      });
+      const notchLeft = createMemo(() => {
+        return {
+          x:
+            arrowCenter().x -
+            normalizedDirectionVector().y * arrowBaseWidth() -
+            normalizedDirectionVector().x * notchDepth(),
+          y:
+            arrowCenter().y +
+            normalizedDirectionVector().x * arrowBaseWidth() -
+            normalizedDirectionVector().y * notchDepth(),
+        };
+      });
+      const notchRight = createMemo(() => {
+        return {
+          x:
+            arrowCenter().x +
+            normalizedDirectionVector().y * arrowBaseWidth() -
+            normalizedDirectionVector().x * notchDepth(),
+          y:
+            arrowCenter().y -
+            normalizedDirectionVector().x * arrowBaseWidth() -
+            normalizedDirectionVector().y * notchDepth(),
+        };
+      });
+      const arrowTip = createMemo(() => {
+        return {
+          x: arrowCenter().x + normalizedDirectionVector().x * arrowLength(),
+          y: arrowCenter().y + normalizedDirectionVector().y * arrowLength(),
+        };
+      });
+
       return (
-        <>
-          <defs>
-            <marker
-              id="vbArrowhead"
-              markerWidth="10"
-              markerHeight="7"
-              refX="0"
-              refY="3.5"
-              orient="auto"
-            >
-              <polygon points="0 0, 10 3.5, 0 7" fill={props.arrowColor} />
-            </marker>
-          </defs>
-          <line
-            x2={props.arrowStart.x}
-            y2={props.arrowStart.y}
-            x1={props.arrowEnd.x}
-            y1={props.arrowEnd.y}
-            stroke={props.arrowColor}
-            stroke-width="2"
-            marker-end="url(#vbArrowhead)"
-          />
-        </>
+        <polygon
+          points={`${arrowTip().x},${arrowTip().y} ${notchLeft().x},${notchLeft().y} ${arrowCenter().x},${arrowCenter().y} ${notchRight().x},${notchRight().y}`}
+          fill={arrowheadColor}
+          stroke={"black"}
+          stroke-width={0}
+        />
       );
     };
     const ViewBoxRect = (props: {
@@ -891,32 +939,6 @@ export function Bluefish(props: BluefishProps) {
       const vbCenterPoint = () => {
         return { x: vbX() + vbW() / 2, y: vbY() + vbH() / 2 };
       };
-      // Calculate the point within the current view box that's closest to the center
-      // of the other view box.
-      const arrowStart = () =>
-        closestPointInViewBox(
-          isZoomed()
-            ? {
-                x: magnificationX(),
-                y: magnificationY(),
-                width: magnificationWidth(),
-                height: magnificationHeight(),
-              }
-            : {
-                x: minX(),
-                y: minY(),
-                width: width(),
-                height: height(),
-              },
-          vbCenterPoint()
-        );
-      // Calculate where the arrow pointing towards that view box ends.
-      const arrowLength = () =>
-        0.25 * Math.min(magnificationHeight(), magnificationWidth());
-      const arrowEnd = () =>
-        calculateArrowEnd(vbCenterPoint(), arrowStart(), arrowLength());
-
-      const arrowColor = "red";
 
       return (
         <>
@@ -930,14 +952,9 @@ export function Bluefish(props: BluefishProps) {
             stroke-width={props.strokeWidth}
           />
           {isZoomed() &&
-            !pointEquals(arrowStart(), vbCenterPoint()) &&
-            props.viewBox !== defaultViewBox() && (
-              <OffScreenArrow
-                arrowColor={arrowColor}
-                arrowStart={arrowStart()}
-                arrowEnd={arrowEnd()}
-                arrowLength={arrowLength()}
-              />
+            props.viewBox &&
+            !viewBoxOverlaps(magnificationViewBox(), props.viewBox) && (
+              <OffScreenArrow targetPoint={vbCenterPoint()} />
             )}
         </>
       );
@@ -946,7 +963,7 @@ export function Bluefish(props: BluefishProps) {
       props: ParentProps & { id: number; lensInfo: LLensInfo }
     ) => {
       const STROKE_WIDTH_VAL = 8;
-      const LENS_RADIUS_VAL = 12 * MAGNIFICATION_DEFAULT;
+      const LENS_RADIUS_VAL = 6 * MAGNIFICATION_DEFAULT;
       const LENS_RADIUS = () =>
         `${LENS_RADIUS_VAL / magnificationFactor()}vmin`;
       const lensID = () => `lensClip-${props.id}`;
@@ -1036,6 +1053,46 @@ export function Bluefish(props: BluefishProps) {
         ) : (
           <>
             {paintProps.children}
+            {/* Dynamic Highlighting */}
+            {isTraversalType(props.mantisComponentType) && currentNode() && (
+              <>
+                <For each={Array.from(voronoi().cellPolygons())}>
+                  {(cell) => (
+                    <polygon
+                      points={cell.map((point) => point.join(",")).join(" ")}
+                      stroke-width={1}
+                      stroke="red"
+                      fill-opacity={0}
+                    />
+                  )}
+                </For>
+                <For each={[...currentNode().children, currentNode().parent]}>
+                  {(nodeId) => {
+                    if (!nodeId || getNodeType(nodeId) === "Bluefish") return;
+                    const nodeBBox = getBbox(nodeId);
+                    const nodeXY = calculateTransformedBboxXY(nodeId);
+                    // Lines have width 0
+
+                    return (
+                      <>
+                        <rect
+                          x={nodeXY.x}
+                          y={nodeXY.y}
+                          width={Math.max(nodeBBox.width ?? 0, 1)}
+                          height={Math.max(nodeBBox.height ?? 0, 1)}
+                          fill-opacity={0}
+                          stroke="blue"
+                          stroke-width={1}
+                        />
+                        {/* <ViewBoxRect
+                          viewBox={`${nodeXY.x} ${nodeXY.y} ${Math.max(nodeBBox.width ?? 0, 1)} ${Math.max(nodeBBox.height ?? 0, 1)}`}
+                        /> */}
+                      </>
+                    );
+                  }}
+                </For>
+              </>
+            )}
             {/* Mini-Map Rectangle */}
             {props.mantisComponentType === MantisComponentType.MMMiniMap && (
               <rect
