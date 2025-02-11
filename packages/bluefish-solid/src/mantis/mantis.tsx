@@ -14,6 +14,7 @@ export enum MantisComponentType {
   SSRight,
   LMain,
   LLens,
+  Preview,
 }
 export enum MantisTraversalPattern {
   Bubble,
@@ -37,7 +38,11 @@ export function isSplitScreenType(type: MantisComponentType) {
  * to traverse the diagram.
  */
 export function isTraversalType(type: MantisComponentType) {
-  return type === MantisComponentType.MMMain || isSplitScreenType(type);
+  return (
+    type === MantisComponentType.MMMain ||
+    isSplitScreenType(type) ||
+    type === MantisComponentType.Preview
+  );
 }
 export function isDraggableType(type: MantisComponentType) {
   return (
@@ -75,12 +80,13 @@ export type MantisState =
       type: "L";
       lensInfo: Accessor<LLensInfo[]>;
       updateLensInfo: Setter<LLensInfo[]>;
-    };
+    }
+  | { type: "P" };
 
 const MantisContext = createContext<MantisState>();
 
 export const MantisProvider = (
-  props: ParentProps & { providerType: "MM" | "SS" | "L" }
+  props: ParentProps & { providerType: "MM" | "SS" | "L" | "P" }
 ) => {
   let providerState: MantisState | undefined;
 
@@ -114,6 +120,9 @@ export const MantisProvider = (
       lensInfo,
       updateLensInfo,
     };
+  } else if (props.providerType === "P") {
+    // PREVIEW
+    providerState = { type: "P" };
   }
 
   return (

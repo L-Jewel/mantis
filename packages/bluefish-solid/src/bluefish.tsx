@@ -38,6 +38,7 @@ import toast, { Toaster } from "solid-toast";
 import gsap from "gsap";
 import * as d3 from "d3";
 import {
+  BiMap,
   isDraggableType,
   isMiniMapContext,
   isMultiLensContext,
@@ -49,6 +50,7 @@ import {
   MantisTraversalPattern,
   useMantisProvider,
 } from "./mantis";
+import { create, set } from "lodash";
 
 export type BluefishProps = ParentProps<{
   width?: number;
@@ -151,6 +153,16 @@ export function Bluefish(props: BluefishProps) {
   const mantisContext = useMantisProvider();
   const [midpoints, setMidpoints] = createSignal<Point[]>([]);
   const midpointsToNodes = new Map<string, string>();
+  /**
+   * scopeName <=> nodeId
+   */
+  const scopeMap = new BiMap<string, string>();
+  const nodeRelations = new Map<string, string[]>([
+    ["planets-stackh", ["mercury", "venus", "earth", "mars"]],
+    ["mercury", ["label", "arrow"]],
+    ["label", ["mercury", "arrow"]],
+    ["arrow", ["label", "mercury"]],
+  ]);
   // Helper functions
   /**
    * @param nodeId a string that corresponds to the ID of a node in the scenegraph
@@ -262,6 +274,25 @@ export function Bluefish(props: BluefishProps) {
       height: unionBBox.bottom - unionBBox.top,
     };
   }
+  function computeBoundingBoxArrow(nodeId: string): {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } {
+    const node = scenegraphSignal().scenegraph[nodeId];
+    if (node && node.type === "node") {
+      const nodeCustomData = node.customData;
+      return {
+        left: Math.min(nodeCustomData.sx, nodeCustomData.ex),
+        top: Math.min(nodeCustomData.sy, nodeCustomData.ey),
+        width: Math.max(Math.abs(nodeCustomData.sx - nodeCustomData.ex), 1),
+        height: Math.max(Math.abs(nodeCustomData.sy - nodeCustomData.ey), 1),
+      };
+    } else {
+      return computeBoundingBoxArrow(node.refId);
+    }
+  }
   function pointToString(point: Point): string {
     return `${point.x},${point.y}`;
   }
@@ -274,6 +305,8 @@ export function Bluefish(props: BluefishProps) {
     const node = scenegraphSignal().scenegraph[nodeId];
     if (nodeType === "Align" || nodeType === "Distribute") {
       return computeBoundingBoxUnion((node as BluefishNodeType).children);
+    } else if (nodeType === "Arrow") {
+      return computeBoundingBoxArrow(nodeId);
     }
     if (node && node.type === "node") {
       return node.bbox;
@@ -349,7 +382,35 @@ export function Bluefish(props: BluefishProps) {
 
   // Calculate the midpoint of each node (Traversal Components Only)
   createEffect(() => {
-    if (isTraversalType(props.mantisComponentType)) {
+    if (props.mantisComponentType === MantisComponentType.Preview) {
+      const newMidpoints = [];
+      const importantNodes = new Set([
+        // "planets-stackh",
+        "mercury",
+        "venus",
+        "earth",
+        "mars",
+        "label",
+        "arrow",
+      ]);
+      for (const iNode of importantNodes) {
+        scopeMap.set(iNode, scope[iNode].layoutNode ?? "");
+      }
+
+      for (const nodeId of scopeMap.getValues()) {
+        if (getNodeType(nodeId) === "Ref") continue;
+        const nodeBbox = getBbox(nodeId);
+        const nodeTransform = calculateTransform(nodeId);
+        const nodeMidpoint = {
+          x: nodeTransform.x + (nodeBbox.left ?? 0) + (nodeBbox.width ?? 0) / 2,
+          y: nodeTransform.y + (nodeBbox.top ?? 0) + (nodeBbox.height ?? 0) / 2,
+        };
+        newMidpoints.push(nodeMidpoint);
+        midpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
+      }
+
+      setMidpoints(newMidpoints);
+    } else if (isTraversalType(props.mantisComponentType)) {
       const newMidpoints = [];
 
       for (const nodeId in scenegraph) {
@@ -369,6 +430,7 @@ export function Bluefish(props: BluefishProps) {
   });
 
   // Information about the currently selected node
+  const [currentNodeVIndex, setCurrentNodeVIndex] = createSignal(-1);
   const [currentNodeId, setCurrentNodeId] = createSignal<string>(id);
   const currentNode = () =>
     scenegraphSignal().scenegraph[currentNodeId()] as BluefishNodeType;
@@ -442,6 +504,7 @@ export function Bluefish(props: BluefishProps) {
     const MAGNIFICATION_DEFAULT = 2;
 
     // SVG View Box Information
+    // TODO: Not matching the actual width and height of the SVG
     const width = () =>
       props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2;
     const height = () =>
@@ -699,7 +762,7 @@ export function Bluefish(props: BluefishProps) {
           } else {
             mantisContext.setViewBBox(defaultViewBox());
           }
-        } else if (isSplitScreenType(props.mantisComponentType)) {
+        } else if (isTraversalType(props.mantisComponentType)) {
           if (isZoomed()) {
             gsap.to(svgRef, {
               attr: { viewBox: magnificationViewBox() },
@@ -778,14 +841,15 @@ export function Bluefish(props: BluefishProps) {
     // Navigational Logic (Traversal Type Components)
     createEffect(() => {
       if (isTraversalType(props.mantisComponentType)) {
+        // Finds the node closest to the cursor.
+        const closestPoint = delaunay().find(mouseX(), mouseY());
+        setCurrentNodeVIndex(closestPoint);
+        const closestNode = midpointsToNodes.get(
+          pointToString(midpoints()[closestPoint])
+        );
+        setCurrentNodeId(resolveNode(closestNode ?? id));
+        // console.log(currentNodeId());
         if (props.mantisTraversalPattern === MantisTraversalPattern.Bubble) {
-          // Finds the node closest to the cursor.
-          const closestPoint = delaunay().find(mouseX(), mouseY());
-          const closestNode = midpointsToNodes.get(
-            pointToString(midpoints()[closestPoint])
-          );
-          setCurrentNodeId(resolveNode(closestNode ?? id));
-          console.log(currentNodeId());
           // Update the user's view to center around that node.
           setMagnificationCenterX(selNodeCenterX());
           setMagnificationCenterY(selNodeCenterY());
@@ -846,9 +910,12 @@ export function Bluefish(props: BluefishProps) {
     });
 
     // HELPER FUNCTIONS
-    const OffScreenArrow = (props: { targetPoint: Point }) => {
+    const OffScreenArrow = (props: {
+      targetPoint: Point;
+      arrowheadColor?: string;
+    }) => {
       // CONSTANTS
-      const arrowheadColor = "purple";
+      const mergedProps = mergeProps({ arrowheadColor: "purple" }, props);
 
       // Calculate the direction vector from the center of the magnification view box to the `targetPoint`.
       const directionVector = createMemo(() => {
@@ -870,7 +937,7 @@ export function Bluefish(props: BluefishProps) {
       // Scale the dimensions of the arrowhead by the `magnificationFactor`.
       const arrowLength = () => 30 / magnificationFactor(); // Length of the arrowhead
       const arrowBaseWidth = () => 15 / magnificationFactor(); // Width of the arrowhead base
-      const arrowPadding = () => 0.5 / magnificationFactor(); // Padding between the arrow and the edge of the view box
+      const arrowPadding = () => 30 / magnificationFactor(); // Padding between the arrow and the edge of the view box
       const notchDepth = () => 12 / magnificationFactor(); // Depth of the arrowhead notch
       const arrowCenter = createMemo(() => {
         return {
@@ -918,7 +985,7 @@ export function Bluefish(props: BluefishProps) {
       return (
         <polygon
           points={`${arrowTip().x},${arrowTip().y} ${notchLeft().x},${notchLeft().y} ${arrowCenter().x},${arrowCenter().y} ${notchRight().x},${notchRight().y}`}
-          fill={arrowheadColor}
+          fill={mergedProps.arrowheadColor}
           stroke={"black"}
           stroke-width={0}
         />
@@ -1056,6 +1123,7 @@ export function Bluefish(props: BluefishProps) {
             {/* Dynamic Highlighting */}
             {isTraversalType(props.mantisComponentType) && currentNode() && (
               <>
+                {/* Voronoi */}
                 <For each={Array.from(voronoi().cellPolygons())}>
                   {(cell) => (
                     <polygon
@@ -1066,8 +1134,16 @@ export function Bluefish(props: BluefishProps) {
                     />
                   )}
                 </For>
-                <For each={[...currentNode().children, currentNode().parent]}>
-                  {(nodeId) => {
+                {/* Highlight Related Nodes (HARDCODED IN `nodeRelations`) */}
+                <For
+                  each={
+                    nodeRelations.get(scopeMap.getKey(currentNodeId()) ?? "") ??
+                    []
+                  }
+                >
+                  {(nodeName) => {
+                    const nodeId = scopeMap.getValue(nodeName);
+                    console.log(nodeName, nodeId);
                     if (!nodeId || getNodeType(nodeId) === "Bluefish") return;
                     const nodeBBox = getBbox(nodeId);
                     const nodeXY = calculateTransformedBboxXY(nodeId);
@@ -1084,10 +1160,62 @@ export function Bluefish(props: BluefishProps) {
                           stroke="blue"
                           stroke-width={1}
                         />
-                        {/* <ViewBoxRect
-                          viewBox={`${nodeXY.x} ${nodeXY.y} ${Math.max(nodeBBox.width ?? 0, 1)} ${Math.max(nodeBBox.height ?? 0, 1)}`}
-                        /> */}
                       </>
+                    );
+                  }}
+                </For>
+                {/* Point at neighbors */}
+                <For
+                  each={Array.from(voronoi().neighbors(currentNodeVIndex()))}
+                >
+                  {(neighborIndex) => {
+                    // Look up the neighbor's node ID.
+                    if (neighborIndex === undefined || neighborIndex < 0)
+                      return;
+                    const neighborNodeMidpoint = () =>
+                      midpoints()[neighborIndex];
+                    const neighborNodeId = midpointsToNodes.get(
+                      pointToString(neighborNodeMidpoint())
+                    );
+                    if (!neighborNodeId) return;
+                    // Determine whether or not to show the arrow.
+                    const neighborBbox = getBbox(neighborNodeId);
+                    const neighborXY =
+                      calculateTransformedBboxXY(neighborNodeId);
+                    const showArrow = () =>
+                      isZoomed() &&
+                      !viewBoxOverlaps(
+                        magnificationViewBox(),
+                        `${neighborXY.x} ${neighborXY.y} ${neighborBbox.width} ${neighborBbox.height}`
+                      );
+                    // Determine the color of the arrow (orange if related, purple if not)
+                    const relatedNodes = () =>
+                      nodeRelations.get(
+                        scopeMap.getKey(currentNodeId()) ?? ""
+                      ) ?? [];
+                    console.log(relatedNodes);
+                    const arrowColor = () =>
+                      relatedNodes().includes(
+                        scopeMap.getKey(neighborNodeId) ?? ""
+                      )
+                        ? "orange"
+                        : "purple";
+
+                    createEffect(() => {
+                      console.log(
+                        neighborNodeId,
+                        showArrow(),
+                        scopeMap.getKey(neighborNodeId)
+                      );
+                    });
+
+                    return (
+                      <Show when={showArrow()}>
+                        <OffScreenArrow
+                          targetPoint={neighborNodeMidpoint()}
+                          arrowheadColor={arrowColor()}
+                        />
+                      </Show>
                     );
                   }}
                 </For>
@@ -1192,9 +1320,9 @@ export function Bluefish(props: BluefishProps) {
             "margin-left": "5px",
           }}
         >
-          {/* <h1>Current Node</h1>
+          <h1>Current Node</h1>
           <p>{currentNodeId()}</p>
-          <pre>{JSON.stringify(currentNode(), null, 2)}</pre> */}
+          <pre>{JSON.stringify(currentNode(), null, 2)}</pre>
         </div>
         <div style={{ float: "left", "margin-right": "40px" }}>
           <h1>Scenegraph</h1>
