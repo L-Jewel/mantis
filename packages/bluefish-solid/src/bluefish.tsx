@@ -43,14 +43,12 @@ import {
   isMiniMapContext,
   isMultiLensContext,
   isSplitScreenContext,
-  isSplitScreenType,
   isTraversalType,
   LLensInfo,
   MantisComponentType,
   MantisTraversalPattern,
   useMantisProvider,
 } from "./mantis";
-import { create, set } from "lodash";
 
 export type BluefishProps = ParentProps<{
   width?: number;
@@ -157,11 +155,51 @@ export function Bluefish(props: BluefishProps) {
    * scopeName <=> nodeId
    */
   const scopeMap = new BiMap<string, string>();
+  // const nodeRelations = new Map<string, string[]>([
+  //   ["planets-stackh", ["mercury", "venus", "earth", "mars"]],
+  //   ["mercury", ["label", "arrow"]],
+  //   ["label", ["mercury", "arrow"]],
+  //   ["arrow", ["label", "mercury"]],
+  // ]);
   const nodeRelations = new Map<string, string[]>([
-    ["planets-stackh", ["mercury", "venus", "earth", "mars"]],
-    ["mercury", ["label", "arrow"]],
-    ["label", ["mercury", "arrow"]],
-    ["arrow", ["label", "mercury"]],
+    ["stackSlot-0", ["address-0", "stack-heap-arrow-0"]],
+    ["stack-heap-arrow-0", ["address-0", "stackSlot-0"]],
+    [
+      "address-0",
+      [
+        "stack-heap-arrow-0",
+        "stackSlot-0",
+        "heap-arrow-0-1",
+        "heap-arrow-0-4",
+        "heap-arrow-0-5",
+        "address-1",
+        "address-2",
+        "address-3",
+      ],
+    ],
+    ["stackSlot-1", ["address-1", "stack-heap-arrow-1"]],
+    ["stack-heap-arrow-1", ["address-1", "stackSlot-1"]],
+    [
+      "address-1",
+      ["stack-heap-arrow-1", "heap-arrow-0-1", "stackSlot-1", "address-0"],
+    ],
+    ["heap-arrow-0-1", ["address-1", "address-0"]],
+    [
+      "address-2",
+      ["heap-arrow-0-4", "address-4", "address-0", "heap-arrow-2-4"],
+    ],
+    ["heap-arrow-0-4", ["address-2", "address-0"]],
+    ["heap-arrow-0-5", ["address-3", "address-0"]],
+    [
+      "address-3",
+      ["address-0", "heap-arrow-0-5", "address-4", "heap-arrow-3-1"],
+    ],
+    [
+      "address-4",
+      ["address-3", "address-2", "heap-arrow-3-1", "heap-arrow-2-4"],
+    ],
+    ["heap-arrow-2-4", ["address-2", "address-4"]],
+    ["heap-arrow-3-1", ["address-3", "address-4"]],
   ]);
   // Helper functions
   /**
@@ -310,8 +348,10 @@ export function Bluefish(props: BluefishProps) {
     }
     if (node && node.type === "node") {
       return node.bbox;
-    } else {
+    } else if (node && node.type === "ref") {
       return getBbox(node.refId);
+    } else {
+      return { left: 0, top: 0, width: 0, height: 0 };
     }
   }
   function calculateTransformedBboxXY(nodeId: string): Point {
@@ -384,17 +424,52 @@ export function Bluefish(props: BluefishProps) {
   createEffect(() => {
     if (props.mantisComponentType === MantisComponentType.Preview) {
       const newMidpoints = [];
+      // const importantNodes = new Set([
+      //   "planets-stackh",
+      //   "mercury",
+      //   "venus",
+      //   "earth",
+      //   "mars",
+      //   "label",
+      //   "arrow",
+      // ]);
       const importantNodes = new Set([
-        // "planets-stackh",
-        "mercury",
-        "venus",
-        "earth",
-        "mars",
-        "label",
-        "arrow",
+        "stack-heap-arrow-0",
+        "stack-heap-arrow-1",
+        "address-0",
+        "address-1",
+        "address-2",
+        "address-3",
+        "address-4",
+        "heap-arrow-0-1",
+        "heap-arrow-0-4",
+        "heap-arrow-0-5",
+        "heap-arrow-2-4",
+        "heap-arrow-3-1",
+        "stackSlot-0",
+        "stackSlot-1",
+        "stackSlot-2",
       ]);
+      /**
+       * Sometimes, the name of the node contains a changing ID. With this
+       * function, we can just use the part of the name that doesn't change
+       * to find the node in the scope.
+       * @param searchString a string to search for in the scope
+       * @returns the actual name of the node in the scope
+       */
+      const findKeyInScope = (searchString: string): string | undefined => {
+        for (const key in scope) {
+          if (key.includes(searchString)) {
+            return key;
+          }
+        }
+        return undefined;
+      };
+
       for (const iNode of importantNodes) {
-        scopeMap.set(iNode, scope[iNode].layoutNode ?? "");
+        const iNodeActual = findKeyInScope(iNode);
+        if (!iNodeActual) continue;
+        scopeMap.set(iNode, scope[iNodeActual].layoutNode ?? "");
       }
 
       for (const nodeId of scopeMap.getValues()) {
@@ -436,12 +511,9 @@ export function Bluefish(props: BluefishProps) {
     scenegraphSignal().scenegraph[currentNodeId()] as BluefishNodeType;
   const currentTransform = () => calculateTransform(currentNodeId());
   const currentBboxInfo = () => {
-    const nodeType = getNodeType(currentNodeId());
-    if (nodeType === "Align" || nodeType === "Distribute") {
-      const unionBBox = computeBoundingBoxUnion(currentNode().children);
-      return unionBBox;
-    }
-    return currentNode()?.bbox ?? { left: 0, top: 0, width: 0, height: 0 };
+    return currentNodeId()
+      ? getBbox(currentNodeId())
+      : { left: 0, top: 0, width: 0, height: 0 };
   };
 
   const layout = (childNodes: ChildNode[]) => {
@@ -517,12 +589,47 @@ export function Bluefish(props: BluefishProps) {
       (props.positioning === "absolute" ? 0 : (paintProps.bbox.top ?? 0));
     const defaultViewBox = () => `${minX()} ${minY()} ${width()} ${height()}`;
 
+    const [actualWidth, setActualWidth] = createSignal(0);
+    const [actualHeight, setActualHeight] = createSignal(0);
+    const [actualMinX, setActualMinX] = createSignal(0);
+    const [actualMinY, setActualMinY] = createSignal(0);
+
+    // Observe changes to the bounding box of svgRef
+    const observer = new ResizeObserver(() => {
+      const svgOrigin = getSVGPositionMouse({ x: 0, y: 0 }) ?? { x: 0, y: 0 };
+      const topLeftCorner = getMousePositionSVG({ x: 0, y: 0 });
+      const bottomRightCorner = getMousePositionSVG({
+        x: svgOrigin.x + (svgRef?.getBoundingClientRect().width ?? 0),
+        y: svgOrigin.y + (svgRef?.getBoundingClientRect().height ?? 0),
+      });
+      setActualWidth(bottomRightCorner?.x ?? 0);
+      setActualHeight(bottomRightCorner?.y ?? 0);
+      setActualMinX(topLeftCorner?.x ?? 0);
+      setActualMinY(topLeftCorner?.y ?? 0);
+    });
+    createEffect(() => {
+      if (svgRef) {
+        observer.observe(svgRef);
+      }
+
+      // Cleanup observer on component unmount
+      return () => {
+        if (svgRef) {
+          observer.unobserve(svgRef);
+        }
+      };
+    });
+
     // Calculates mouse position in SVG coordinates
     // Reference: https://github.com/enxaneta/SVG-mouse-position-in-svg/blob/master/mousePositionSVG.js
     const [mouseX, setMouseX] = createSignal(0);
     const [mouseY, setMouseY] = createSignal(0);
     const [elementActive, setElementActive] = createSignal(false);
     const [mouseActive, setMouseActive] = createSignal(true);
+    /**
+     * @param point - a point in screen coordinates
+     * @returns the corresponding point in SVG coordinates
+     */
     function getMousePositionSVG(point: Point): Point | undefined {
       if (svgRef) {
         let mousePoint = svgRef.createSVGPoint();
@@ -532,6 +639,24 @@ export function Bluefish(props: BluefishProps) {
         if (screenCTM) {
           mousePoint = mousePoint.matrixTransform(screenCTM.inverse());
           return { x: mousePoint.x, y: mousePoint.y };
+        }
+      }
+      return undefined;
+    }
+    /**
+     * The inverse of `getMousePositionSVG`.
+     * @param point - a point in SVG coordinates
+     * @returns the corresponding point in screen coordinates
+     */
+    function getSVGPositionMouse(point: Point): Point | undefined {
+      if (svgRef) {
+        let svgPoint = svgRef.createSVGPoint();
+        svgPoint.x = point.x;
+        svgPoint.y = point.y;
+        const screenCTM = svgRef.getScreenCTM();
+        if (screenCTM) {
+          svgPoint = svgPoint.matrixTransform(screenCTM);
+          return { x: svgPoint.x, y: svgPoint.y };
         }
       }
       return undefined;
@@ -580,8 +705,8 @@ export function Bluefish(props: BluefishProps) {
 
     // Magnification Information (i.e. the user's view box)
     const [magnificationFactor, setMagnificationFactor] = createSignal(1);
-    const magnificationWidth = () => width() / magnificationFactor();
-    const magnificationHeight = () => height() / magnificationFactor();
+    const magnificationWidth = () => actualWidth() / magnificationFactor();
+    const magnificationHeight = () => actualHeight() / magnificationFactor();
     const [magnificationCenterX, setMagnificationCenterX] =
       createSignal(selNodeCenterX());
     const [magnificationCenterY, setMagnificationCenterY] =
@@ -612,7 +737,12 @@ export function Bluefish(props: BluefishProps) {
         (d) => d.y
       );
     const voronoi = () =>
-      delaunay().voronoi([minX(), minY(), minX() + width(), minY() + height()]);
+      delaunay().voronoi([
+        actualMinX(),
+        actualMinY(),
+        actualMinX() + actualWidth(),
+        actualMinY() + actualHeight(),
+      ]);
 
     // VISUAL LOGIC
     // Handles zoom-related functionalities
@@ -848,7 +978,6 @@ export function Bluefish(props: BluefishProps) {
           pointToString(midpoints()[closestPoint])
         );
         setCurrentNodeId(resolveNode(closestNode ?? id));
-        // console.log(currentNodeId());
         if (props.mantisTraversalPattern === MantisTraversalPattern.Bubble) {
           // Update the user's view to center around that node.
           setMagnificationCenterX(selNodeCenterX());
@@ -935,10 +1064,14 @@ export function Bluefish(props: BluefishProps) {
       });
 
       // Scale the dimensions of the arrowhead by the `magnificationFactor`.
-      const arrowLength = () => 30 / magnificationFactor(); // Length of the arrowhead
-      const arrowBaseWidth = () => 15 / magnificationFactor(); // Width of the arrowhead base
-      const arrowPadding = () => 30 / magnificationFactor(); // Padding between the arrow and the edge of the view box
-      const notchDepth = () => 12 / magnificationFactor(); // Depth of the arrowhead notch
+      const arrowLength = () =>
+        Math.min(width(), height()) / magnificationFactor() / 4; // Length of the arrowhead
+      const arrowBaseWidth = () =>
+        Math.min(width(), height()) / magnificationFactor() / 8; // Width of the arrowhead base
+      const arrowPadding = () =>
+        Math.min(width(), height()) / magnificationFactor() / 4; // Padding between the arrow and the edge of the view box
+      const notchDepth = () =>
+        Math.min(width(), height()) / magnificationFactor() / 8; // Depth of the arrowhead notch
       const arrowCenter = createMemo(() => {
         return {
           x:
@@ -981,14 +1114,28 @@ export function Bluefish(props: BluefishProps) {
           y: arrowCenter().y + normalizedDirectionVector().y * arrowLength(),
         };
       });
+      const iconCenter = createMemo(() => {
+        return {
+          x: arrowCenter().x - normalizedDirectionVector().x * arrowLength(),
+          y: arrowCenter().y - normalizedDirectionVector().y * arrowLength(),
+        };
+      });
 
       return (
-        <polygon
-          points={`${arrowTip().x},${arrowTip().y} ${notchLeft().x},${notchLeft().y} ${arrowCenter().x},${arrowCenter().y} ${notchRight().x},${notchRight().y}`}
-          fill={mergedProps.arrowheadColor}
-          stroke={"black"}
-          stroke-width={0}
-        />
+        <>
+          <polygon
+            points={`${arrowTip().x},${arrowTip().y} ${notchLeft().x},${notchLeft().y} ${arrowCenter().x},${arrowCenter().y} ${notchRight().x},${notchRight().y}`}
+            fill={mergedProps.arrowheadColor}
+            stroke={"black"}
+            stroke-width={0}
+          />
+          {/* <circle
+            cx={iconCenter().x}
+            cy={iconCenter().y}
+            r={5}
+            fill={"black"}
+          /> */}
+        </>
       );
     };
     const ViewBoxRect = (props: {
@@ -1134,6 +1281,16 @@ export function Bluefish(props: BluefishProps) {
                     />
                   )}
                 </For>
+                {/* Highlight Selected Node */}
+                <rect
+                  stroke="green"
+                  fill="none"
+                  stroke-width={2}
+                  x={selNodeX()}
+                  y={selNodeY()}
+                  width={selNodeWidth()}
+                  height={selNodeHeight()}
+                />
                 {/* Highlight Related Nodes (HARDCODED IN `nodeRelations`) */}
                 <For
                   each={
@@ -1143,7 +1300,6 @@ export function Bluefish(props: BluefishProps) {
                 >
                   {(nodeName) => {
                     const nodeId = scopeMap.getValue(nodeName);
-                    console.log(nodeName, nodeId);
                     if (!nodeId || getNodeType(nodeId) === "Bluefish") return;
                     const nodeBBox = getBbox(nodeId);
                     const nodeXY = calculateTransformedBboxXY(nodeId);
@@ -1158,7 +1314,7 @@ export function Bluefish(props: BluefishProps) {
                           height={Math.max(nodeBBox.height ?? 0, 1)}
                           fill-opacity={0}
                           stroke="blue"
-                          stroke-width={1}
+                          stroke-width={2}
                         />
                       </>
                     );
@@ -1193,21 +1349,12 @@ export function Bluefish(props: BluefishProps) {
                       nodeRelations.get(
                         scopeMap.getKey(currentNodeId()) ?? ""
                       ) ?? [];
-                    console.log(relatedNodes);
                     const arrowColor = () =>
                       relatedNodes().includes(
                         scopeMap.getKey(neighborNodeId) ?? ""
                       )
                         ? "orange"
                         : "purple";
-
-                    createEffect(() => {
-                      console.log(
-                        neighborNodeId,
-                        showArrow(),
-                        scopeMap.getKey(neighborNodeId)
-                      );
-                    });
 
                     return (
                       <Show when={showArrow()}>

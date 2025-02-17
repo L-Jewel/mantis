@@ -27,11 +27,12 @@ export const Heap = withBluefish((props: HeapProps) => {
       <StackV alignment="left" spacing={75}>
         <For each={props.heapArrangement}>
           {(row, index) => (
-            <StackH alignment="bottom" spacing={75}>
+            <StackH name={`tuple-${index()}`} alignment="bottom" spacing={75}>
               <For each={row}>
-                {(address) =>
+                {(address, addI) =>
                   address === null ? (
                     <Rect
+                      name={`tuple-${index()}-null-${addI()}`}
                       height={60}
                       width={140}
                       fill={"none"}
@@ -67,6 +68,7 @@ export const Heap = withBluefish((props: HeapProps) => {
               ) {
                 return (
                   <Arrow
+                    name={`heap-arrow-${address()}-${elmTupleIndex()}`}
                     bow={0}
                     padEnd={25}
                     stroke="#1A5683"
