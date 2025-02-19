@@ -1,6 +1,6 @@
 {
   "name": "bluefish-js",
-  "version": "0.0.35",
+  "version": "0.0.37",
   "description": "A JS diagramming library",
   "type": "module",
   "files": [
@@ -31,6 +31,6 @@
   },
   "dependencies": {
     "bluefish-solid": "workspace:*",
-    "solid-js": "^1.9.1"
+    "solid-js": "^1.9.3"
   }
 }
