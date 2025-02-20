@@ -1,0 +1,1 @@
+{"version":3,"file":"multiLens.d.ts","sourceRoot":"","sources":["../../src/mantis/multiLens.tsx"],"names":[],"mappings":"AAAA,OAAO,EAAc,WAAW,EAAE,MAAM,UAAU,CAAC;AACnD,OAAO,EAIL,sBAAsB,EAEvB,MAAM,UAAU,CAAC;AAwBlB,eAAO,MAAM,SAAS,UACb,WAAW,GAAG;IACnB,gBAAgB,CAAC,EAAE,sBAAsB,CAAC;CAC3C,mCAeF,CAAC"}

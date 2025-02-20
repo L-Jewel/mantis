@@ -1,0 +1,1 @@
+{"version":3,"file":"preview.d.ts","sourceRoot":"","sources":["../../src/mantis/preview.tsx"],"names":[],"mappings":"AAAA,OAAO,EAAE,WAAW,EAAE,MAAM,UAAU,CAAC;AAEvC,OAAO,EAGL,sBAAsB,EACvB,MAAM,UAAU,CAAC;AAElB,eAAO,MAAM,OAAO,UACX,WAAW,GAAG;IAAE,gBAAgB,CAAC,EAAE,sBAAsB,CAAA;CAAE,mCAenE,CAAC"}

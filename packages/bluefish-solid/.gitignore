@@ -1,0 +1,6 @@
+node_modules
+dist
+/public/App.tsx
+*/.DS_Store
+build-storybook.log
+chromatic.log

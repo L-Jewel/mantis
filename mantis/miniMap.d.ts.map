@@ -1,0 +1,1 @@
+{"version":3,"file":"miniMap.d.ts","sourceRoot":"","sources":["../../src/mantis/miniMap.tsx"],"names":[],"mappings":"AAAA,OAAO,EAAE,WAAW,EAAE,MAAM,UAAU,CAAC;AAEvC,OAAO,EAGL,sBAAsB,EACvB,MAAM,UAAU,CAAC;AAElB,eAAO,MAAM,OAAO,UACX,WAAW,GAAG;IACnB,gBAAgB,CAAC,EAAE,sBAAsB,CAAC;CAC3C,mCAoBF,CAAC"}

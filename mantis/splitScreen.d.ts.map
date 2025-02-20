@@ -1,0 +1,1 @@
+{"version":3,"file":"splitScreen.d.ts","sourceRoot":"","sources":["../../src/mantis/splitScreen.tsx"],"names":[],"mappings":"AAAA,OAAO,EAAE,WAAW,EAAE,MAAM,UAAU,CAAC;AACvC,OAAO,EAGL,sBAAsB,EACvB,MAAM,UAAU,CAAC;AAGlB,eAAO,MAAM,WAAW,UACf,WAAW,GAAG;IACnB,gBAAgB,CAAC,EAAE,sBAAsB,CAAC;IAC1C,aAAa,EAAE,KAAK,GAAG,QAAQ,CAAC;CACjC,mCAiCF,CAAC"}
