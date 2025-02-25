@@ -1089,13 +1089,13 @@ export function Bluefish(props: BluefishProps) {
 
       // Scale the dimensions of the arrowhead by the `magnificationFactor`.
       const arrowLength = () =>
-        Math.min(width(), height()) / magnificationFactor() / 4; // Length of the arrowhead
+        Math.min(actualWidth(), actualHeight()) / magnificationFactor() / 8; // Length of the arrowhead
       const arrowBaseWidth = () =>
-        Math.min(width(), height()) / magnificationFactor() / 8; // Width of the arrowhead base
+        Math.min(actualWidth(), actualHeight()) / magnificationFactor() / 16; // Width of the arrowhead base
       const arrowPadding = () =>
-        Math.min(width(), height()) / magnificationFactor() / 4; // Padding between the arrow and the edge of the view box
+        Math.min(actualWidth(), actualHeight()) / magnificationFactor() / 8; // Padding between the arrow and the edge of the view box
       const notchDepth = () =>
-        Math.min(width(), height()) / magnificationFactor() / 8; // Depth of the arrowhead notch
+        Math.min(actualWidth(), actualHeight()) / magnificationFactor() / 16; // Depth of the arrowhead notch
       const arrowCenter = createMemo(() => {
         return {
           x:
