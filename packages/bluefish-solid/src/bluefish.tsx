@@ -42,6 +42,7 @@ import {
   isDraggableType,
   isMiniMapContext,
   isMultiLensContext,
+  isPreviewType,
   isSplitScreenContext,
   isTraversalType,
   LLensInfo,
@@ -57,9 +58,11 @@ export type BluefishProps = ParentProps<{
   id?: string;
   debug?: boolean;
   positioning?: "absolute" | "relative";
-  mantisComponentType: MantisComponentType;
+  mantisComponentType?: MantisComponentType;
   mantisTraversalPattern?: MantisTraversalPattern;
   mantisId?: number;
+  showVoronoi?: boolean;
+  showHighlighting?: boolean;
 }>;
 type BluefishNodeType = {
   type: "node";
@@ -81,6 +84,66 @@ type ViewBox = {
   y: number;
   width: number;
   height: number;
+};
+
+const getNodeRelations = (
+  type: MantisComponentType | undefined
+): Map<string, string[]> => {
+  switch (type) {
+    case MantisComponentType.PreviewPlanets: {
+      return new Map<string, string[]>([
+        ["planets-stackh", ["mercury", "venus", "earth", "mars"]],
+        ["mercury", ["label", "arrow"]],
+        ["label", ["mercury", "arrow"]],
+        ["arrow", ["label", "mercury"]],
+      ]);
+    }
+    case MantisComponentType.PreviewPythonTutor: {
+      return new Map<string, string[]>([
+        ["stackSlot-0", ["address-0", "stack-heap-arrow-0"]],
+        ["stack-heap-arrow-0", ["address-0", "stackSlot-0"]],
+        [
+          "address-0",
+          [
+            "stack-heap-arrow-0",
+            "stackSlot-0",
+            "heap-arrow-0-1",
+            "heap-arrow-0-4",
+            "heap-arrow-0-5",
+            "address-1",
+            "address-2",
+            "address-3",
+          ],
+        ],
+        ["stackSlot-1", ["address-1", "stack-heap-arrow-1"]],
+        ["stack-heap-arrow-1", ["address-1", "stackSlot-1"]],
+        [
+          "address-1",
+          ["stack-heap-arrow-1", "heap-arrow-0-1", "stackSlot-1", "address-0"],
+        ],
+        ["heap-arrow-0-1", ["address-1", "address-0"]],
+        [
+          "address-2",
+          ["heap-arrow-0-4", "address-4", "address-0", "heap-arrow-2-4"],
+        ],
+        ["heap-arrow-0-4", ["address-2", "address-0"]],
+        ["heap-arrow-0-5", ["address-3", "address-0"]],
+        [
+          "address-3",
+          ["address-0", "heap-arrow-0-5", "address-4", "heap-arrow-3-1"],
+        ],
+        [
+          "address-4",
+          ["address-3", "address-2", "heap-arrow-3-1", "heap-arrow-2-4"],
+        ],
+        ["heap-arrow-2-4", ["address-2", "address-4"]],
+        ["heap-arrow-3-1", ["address-3", "address-4"]],
+      ]);
+    }
+    default: {
+      return new Map<string, string[]>([]);
+    }
+  }
 };
 
 declare global {
@@ -155,52 +218,7 @@ export function Bluefish(props: BluefishProps) {
    * scopeName <=> nodeId
    */
   const scopeMap = new BiMap<string, string>();
-  // const nodeRelations = new Map<string, string[]>([
-  //   ["planets-stackh", ["mercury", "venus", "earth", "mars"]],
-  //   ["mercury", ["label", "arrow"]],
-  //   ["label", ["mercury", "arrow"]],
-  //   ["arrow", ["label", "mercury"]],
-  // ]);
-  const nodeRelations = new Map<string, string[]>([
-    ["stackSlot-0", ["address-0", "stack-heap-arrow-0"]],
-    ["stack-heap-arrow-0", ["address-0", "stackSlot-0"]],
-    [
-      "address-0",
-      [
-        "stack-heap-arrow-0",
-        "stackSlot-0",
-        "heap-arrow-0-1",
-        "heap-arrow-0-4",
-        "heap-arrow-0-5",
-        "address-1",
-        "address-2",
-        "address-3",
-      ],
-    ],
-    ["stackSlot-1", ["address-1", "stack-heap-arrow-1"]],
-    ["stack-heap-arrow-1", ["address-1", "stackSlot-1"]],
-    [
-      "address-1",
-      ["stack-heap-arrow-1", "heap-arrow-0-1", "stackSlot-1", "address-0"],
-    ],
-    ["heap-arrow-0-1", ["address-1", "address-0"]],
-    [
-      "address-2",
-      ["heap-arrow-0-4", "address-4", "address-0", "heap-arrow-2-4"],
-    ],
-    ["heap-arrow-0-4", ["address-2", "address-0"]],
-    ["heap-arrow-0-5", ["address-3", "address-0"]],
-    [
-      "address-3",
-      ["address-0", "heap-arrow-0-5", "address-4", "heap-arrow-3-1"],
-    ],
-    [
-      "address-4",
-      ["address-3", "address-2", "heap-arrow-3-1", "heap-arrow-2-4"],
-    ],
-    ["heap-arrow-2-4", ["address-2", "address-4"]],
-    ["heap-arrow-3-1", ["address-3", "address-4"]],
-  ]);
+  const nodeRelations = () => getNodeRelations(props.mantisComponentType);
   // Helper functions
   /**
    * @param nodeId a string that corresponds to the ID of a node in the scenegraph
@@ -383,7 +401,7 @@ export function Bluefish(props: BluefishProps) {
   /**
    * @returns the % dimensions (height & width) that correspond to `component`.
    */
-  function calculateSVGDims(component: MantisComponentType) {
+  function calculateSVGDims(component: MantisComponentType | undefined) {
     switch (component) {
       case MantisComponentType.MMMiniMap:
         return "30%";
@@ -395,7 +413,7 @@ export function Bluefish(props: BluefishProps) {
    * @returns a CSS properties object to style the SVG based on `component`.
    */
   function determineCSSStyle(
-    component: MantisComponentType
+    component: MantisComponentType | undefined
   ): JSX.CSSProperties {
     switch (component) {
       case MantisComponentType.MMMiniMap:
@@ -422,7 +440,7 @@ export function Bluefish(props: BluefishProps) {
 
   // Calculate the midpoint of each node (Traversal Components Only)
   createEffect(() => {
-    if (props.mantisComponentType === MantisComponentType.Preview) {
+    if (isPreviewType(props.mantisComponentType)) {
       const newMidpoints = [];
       // const importantNodes = new Set([
       //   "planets-stackh",
@@ -705,8 +723,14 @@ export function Bluefish(props: BluefishProps) {
 
     // Magnification Information (i.e. the user's view box)
     const [magnificationFactor, setMagnificationFactor] = createSignal(1);
-    const magnificationWidth = () => actualWidth() / magnificationFactor();
-    const magnificationHeight = () => actualHeight() / magnificationFactor();
+    const magnificationWidth = () =>
+      props.mantisComponentType === MantisComponentType.LLens
+        ? width() / magnificationFactor()
+        : actualWidth() / magnificationFactor();
+    const magnificationHeight = () =>
+      props.mantisComponentType === MantisComponentType.LLens
+        ? height() / magnificationFactor()
+        : actualHeight() / magnificationFactor();
     const [magnificationCenterX, setMagnificationCenterX] =
       createSignal(selNodeCenterX());
     const [magnificationCenterY, setMagnificationCenterY] =
@@ -1177,7 +1201,7 @@ export function Bluefish(props: BluefishProps) {
       props: ParentProps & { id: number; lensInfo: LLensInfo }
     ) => {
       const STROKE_WIDTH_VAL = 8;
-      const LENS_RADIUS_VAL = 6 * MAGNIFICATION_DEFAULT;
+      const LENS_RADIUS_VAL = 10 * MAGNIFICATION_DEFAULT;
       const LENS_RADIUS = () =>
         `${LENS_RADIUS_VAL / magnificationFactor()}vmin`;
       const lensID = () => `lensClip-${props.id}`;
@@ -1267,105 +1291,113 @@ export function Bluefish(props: BluefishProps) {
         ) : (
           <>
             {paintProps.children}
-            {/* Dynamic Highlighting */}
+            {/* Voronoi, Dynamic Highlighting & Indicators */}
             {isTraversalType(props.mantisComponentType) && currentNode() && (
               <>
                 {/* Voronoi */}
-                <For each={Array.from(voronoi().cellPolygons())}>
-                  {(cell) => (
-                    <polygon
-                      points={cell.map((point) => point.join(",")).join(" ")}
-                      stroke-width={1}
-                      stroke="red"
-                      fill-opacity={0}
-                    />
-                  )}
-                </For>
-                {/* Highlight Selected Node */}
-                <rect
-                  stroke="green"
-                  fill="none"
-                  stroke-width={2}
-                  x={selNodeX()}
-                  y={selNodeY()}
-                  width={selNodeWidth()}
-                  height={selNodeHeight()}
-                />
-                {/* Highlight Related Nodes (HARDCODED IN `nodeRelations`) */}
-                <For
-                  each={
-                    nodeRelations.get(scopeMap.getKey(currentNodeId()) ?? "") ??
-                    []
-                  }
-                >
-                  {(nodeName) => {
-                    const nodeId = scopeMap.getValue(nodeName);
-                    if (!nodeId || getNodeType(nodeId) === "Bluefish") return;
-                    const nodeBBox = getBbox(nodeId);
-                    const nodeXY = calculateTransformedBboxXY(nodeId);
-                    // Lines have width 0
-
-                    return (
-                      <>
-                        <rect
-                          x={nodeXY.x}
-                          y={nodeXY.y}
-                          width={Math.max(nodeBBox.width ?? 0, 1)}
-                          height={Math.max(nodeBBox.height ?? 0, 1)}
-                          fill-opacity={0}
-                          stroke="blue"
-                          stroke-width={2}
-                        />
-                      </>
-                    );
-                  }}
-                </For>
-                {/* Point at neighbors */}
-                <For
-                  each={Array.from(voronoi().neighbors(currentNodeVIndex()))}
-                >
-                  {(neighborIndex) => {
-                    // Look up the neighbor's node ID.
-                    if (neighborIndex === undefined || neighborIndex < 0)
-                      return;
-                    const neighborNodeMidpoint = () =>
-                      midpoints()[neighborIndex];
-                    const neighborNodeId = midpointsToNodes.get(
-                      pointToString(neighborNodeMidpoint())
-                    );
-                    if (!neighborNodeId) return;
-                    // Determine whether or not to show the arrow.
-                    const neighborBbox = getBbox(neighborNodeId);
-                    const neighborXY =
-                      calculateTransformedBboxXY(neighborNodeId);
-                    const showArrow = () =>
-                      isZoomed() &&
-                      !viewBoxOverlaps(
-                        magnificationViewBox(),
-                        `${neighborXY.x} ${neighborXY.y} ${neighborBbox.width} ${neighborBbox.height}`
-                      );
-                    // Determine the color of the arrow (orange if related, purple if not)
-                    const relatedNodes = () =>
-                      nodeRelations.get(
+                <Show when={props.showVoronoi}>
+                  <For each={Array.from(voronoi().cellPolygons())}>
+                    {(cell) => (
+                      <polygon
+                        points={cell.map((point) => point.join(",")).join(" ")}
+                        stroke-width={1}
+                        stroke="red"
+                        fill-opacity={0}
+                      />
+                    )}
+                  </For>
+                </Show>
+                {/* Dynamic Highlighting */}
+                <Show when={props.showHighlighting}>
+                  {/* Highlight Selected Node */}
+                  <rect
+                    stroke="green"
+                    fill="none"
+                    stroke-width={2}
+                    x={selNodeX()}
+                    y={selNodeY()}
+                    width={selNodeWidth()}
+                    height={selNodeHeight()}
+                  />
+                  {/* Highlight Related Nodes (HARDCODED IN `nodeRelations`) */}
+                  <For
+                    each={
+                      nodeRelations().get(
                         scopeMap.getKey(currentNodeId()) ?? ""
-                      ) ?? [];
-                    const arrowColor = () =>
-                      relatedNodes().includes(
-                        scopeMap.getKey(neighborNodeId) ?? ""
-                      )
-                        ? "orange"
-                        : "purple";
+                      ) ?? []
+                    }
+                  >
+                    {(nodeName) => {
+                      const nodeId = scopeMap.getValue(nodeName);
+                      if (!nodeId || getNodeType(nodeId) === "Bluefish") return;
+                      const nodeBBox = getBbox(nodeId);
+                      const nodeXY = calculateTransformedBboxXY(nodeId);
+                      // Lines have width 0
 
-                    return (
-                      <Show when={showArrow()}>
-                        <OffScreenArrow
-                          targetPoint={neighborNodeMidpoint()}
-                          arrowheadColor={arrowColor()}
-                        />
-                      </Show>
-                    );
-                  }}
-                </For>
+                      return (
+                        <>
+                          <rect
+                            x={nodeXY.x}
+                            y={nodeXY.y}
+                            width={Math.max(nodeBBox.width ?? 0, 1)}
+                            height={Math.max(nodeBBox.height ?? 0, 1)}
+                            fill-opacity={0}
+                            stroke="blue"
+                            stroke-width={2}
+                          />
+                        </>
+                      );
+                    }}
+                  </For>
+                </Show>
+                {/* Indicators that point at neighbors */}
+                <Show when={isPreviewType(props.mantisComponentType)}>
+                  <For
+                    each={Array.from(voronoi().neighbors(currentNodeVIndex()))}
+                  >
+                    {(neighborIndex) => {
+                      // Look up the neighbor's node ID.
+                      if (neighborIndex === undefined || neighborIndex < 0)
+                        return;
+                      const neighborNodeMidpoint = () =>
+                        midpoints()[neighborIndex];
+                      const neighborNodeId = midpointsToNodes.get(
+                        pointToString(neighborNodeMidpoint())
+                      );
+                      if (!neighborNodeId) return;
+                      // Determine whether or not to show the arrow.
+                      const neighborBbox = getBbox(neighborNodeId);
+                      const neighborXY =
+                        calculateTransformedBboxXY(neighborNodeId);
+                      const showArrow = () =>
+                        isZoomed() &&
+                        !viewBoxOverlaps(
+                          magnificationViewBox(),
+                          `${neighborXY.x} ${neighborXY.y} ${neighborBbox.width} ${neighborBbox.height}`
+                        );
+                      // Determine the color of the arrow (orange if related, purple if not)
+                      const relatedNodes = () =>
+                        nodeRelations().get(
+                          scopeMap.getKey(currentNodeId()) ?? ""
+                        ) ?? [];
+                      const arrowColor = () =>
+                        relatedNodes().includes(
+                          scopeMap.getKey(neighborNodeId) ?? ""
+                        )
+                          ? "orange"
+                          : "purple";
+
+                      return (
+                        <Show when={showArrow()}>
+                          <OffScreenArrow
+                            targetPoint={neighborNodeMidpoint()}
+                            arrowheadColor={arrowColor()}
+                          />
+                        </Show>
+                      );
+                    }}
+                  </For>
+                </Show>
               </>
             )}
             {/* Mini-Map Rectangle */}

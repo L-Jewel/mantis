@@ -7,15 +7,24 @@ import {
 } from "./mantis";
 
 export const Preview = (
-  props: ParentProps & { traversalPattern?: MantisTraversalPattern }
+  props: ParentProps & {
+    traversalPattern?: MantisTraversalPattern;
+    diagram: "Planets" | "Python-Tutor";
+    showVoronoi?: boolean;
+    showHighlighting?: boolean;
+  }
 ) => {
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
       <MantisProvider providerType="P">
         <Bluefish
-          mantisComponentType={MantisComponentType.Preview}
+          mantisComponentType={
+            props.diagram === "Planets"
+              ? MantisComponentType.PreviewPlanets
+              : MantisComponentType.PreviewPythonTutor
+          }
           mantisTraversalPattern={props.traversalPattern}
-          debug={true}
+          {...props}
         >
           {props.children}
         </Bluefish>

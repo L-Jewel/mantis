@@ -1,4 +1,4 @@
-import { For, Index, ParentProps } from "solid-js";
+import { createEffect, Index, ParentProps } from "solid-js";
 import {
   isMultiLensContext,
   MantisComponentType,
@@ -32,14 +32,17 @@ const LensArray = (props: ParentProps) => {
 export const MultiLens = (
   props: ParentProps & {
     traversalPattern?: MantisTraversalPattern;
+    showVoronoi?: boolean;
+    showHighlighting?: boolean;
   }
 ) => {
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
+    <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <MantisProvider providerType="L">
         <Bluefish
           mantisComponentType={MantisComponentType.LMain}
           mantisTraversalPattern={props.traversalPattern}
+          {...props}
         >
           {props.children}
         </Bluefish>

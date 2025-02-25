@@ -10,6 +10,8 @@ export const SplitScreen = (
   props: ParentProps & {
     traversalPattern?: MantisTraversalPattern;
     flexDirection: "row" | "column";
+    showVoronoi?: boolean;
+    showHighlighting?: boolean;
   }
 ) => {
   /**
@@ -22,8 +24,8 @@ export const SplitScreen = (
     <div
       style={{
         display: "flex",
-        width: "100vw",
-        height: "100vh",
+        width: "100%",
+        height: "100%",
         "flex-direction": props.flexDirection,
       }}
     >
@@ -31,6 +33,7 @@ export const SplitScreen = (
         <Bluefish
           mantisComponentType={MantisComponentType.SSLeft}
           mantisTraversalPattern={props.traversalPattern}
+          {...props}
         >
           {props.children}
         </Bluefish>

@@ -14,7 +14,8 @@ export enum MantisComponentType {
   SSRight,
   LMain,
   LLens,
-  Preview,
+  PreviewPlanets,
+  PreviewPythonTutor,
 }
 export enum MantisTraversalPattern {
   Bubble,
@@ -25,26 +26,35 @@ export enum MantisTraversalPattern {
  * @returns true if the component of type `type` is a part of the Split Screen
  * functionality.
  */
-export function isSplitScreenType(type: MantisComponentType) {
+export function isSplitScreenType(type: MantisComponentType | undefined) {
   return (
     type === MantisComponentType.SSLeft || type === MantisComponentType.SSRight
   );
 }
-
+/**
+ * @returns true if the component of type `type` is a part of the Preview
+ * functionality.
+ */
+export function isPreviewType(type: MantisComponentType | undefined) {
+  return (
+    type === MantisComponentType.PreviewPlanets ||
+    type === MantisComponentType.PreviewPythonTutor
+  );
+}
 /**
  * Differentiate between components that users can use to traverse the diagram, and
  * components with other purposes (e.g. the mini-map).
  * @returns true if the component of type `type` is a component that users can use
  * to traverse the diagram.
  */
-export function isTraversalType(type: MantisComponentType) {
+export function isTraversalType(type: MantisComponentType | undefined) {
   return (
     type === MantisComponentType.MMMain ||
     isSplitScreenType(type) ||
-    type === MantisComponentType.Preview
+    isPreviewType(type)
   );
 }
-export function isDraggableType(type: MantisComponentType) {
+export function isDraggableType(type: MantisComponentType | undefined) {
   return (
     type === MantisComponentType.MMMiniMap || type === MantisComponentType.LLens
   );
