@@ -145,6 +145,45 @@ const getNodeRelations = (
     }
   }
 };
+const getImportantNodes = (
+  type: MantisComponentType | undefined
+): Set<string> => {
+  switch (type) {
+    case MantisComponentType.PreviewPlanets: {
+      return new Set([
+        "planets-stackh",
+        "mercury",
+        "venus",
+        "earth",
+        "mars",
+        "label",
+        "arrow",
+      ]);
+    }
+    case MantisComponentType.PreviewPythonTutor: {
+      return new Set([
+        "stack-heap-arrow-0",
+        "stack-heap-arrow-1",
+        "address-0",
+        "address-1",
+        "address-2",
+        "address-3",
+        "address-4",
+        "heap-arrow-0-1",
+        "heap-arrow-0-4",
+        "heap-arrow-0-5",
+        "heap-arrow-2-4",
+        "heap-arrow-3-1",
+        "stackSlot-0",
+        "stackSlot-1",
+        "stackSlot-2",
+      ]);
+    }
+    default: {
+      return new Set([]);
+    }
+  }
+};
 
 declare global {
   interface Window {
@@ -219,6 +258,7 @@ export function Bluefish(props: BluefishProps) {
    */
   const scopeMap = new BiMap<string, string>();
   const nodeRelations = () => getNodeRelations(props.mantisComponentType);
+  const importantNodes = () => getImportantNodes(props.mantisComponentType);
   // Helper functions
   /**
    * @param nodeId a string that corresponds to the ID of a node in the scenegraph
@@ -442,32 +482,6 @@ export function Bluefish(props: BluefishProps) {
   createEffect(() => {
     if (isPreviewType(props.mantisComponentType)) {
       const newMidpoints = [];
-      // const importantNodes = new Set([
-      //   "planets-stackh",
-      //   "mercury",
-      //   "venus",
-      //   "earth",
-      //   "mars",
-      //   "label",
-      //   "arrow",
-      // ]);
-      const importantNodes = new Set([
-        "stack-heap-arrow-0",
-        "stack-heap-arrow-1",
-        "address-0",
-        "address-1",
-        "address-2",
-        "address-3",
-        "address-4",
-        "heap-arrow-0-1",
-        "heap-arrow-0-4",
-        "heap-arrow-0-5",
-        "heap-arrow-2-4",
-        "heap-arrow-3-1",
-        "stackSlot-0",
-        "stackSlot-1",
-        "stackSlot-2",
-      ]);
       /**
        * Sometimes, the name of the node contains a changing ID. With this
        * function, we can just use the part of the name that doesn't change
@@ -484,7 +498,7 @@ export function Bluefish(props: BluefishProps) {
         return undefined;
       };
 
-      for (const iNode of importantNodes) {
+      for (const iNode of importantNodes()) {
         const iNodeActual = findKeyInScope(iNode);
         if (!iNodeActual) continue;
         scopeMap.set(iNode, scope[iNodeActual].layoutNode ?? "");
@@ -997,6 +1011,8 @@ export function Bluefish(props: BluefishProps) {
       if (isTraversalType(props.mantisComponentType)) {
         // Finds the node closest to the cursor.
         const closestPoint = delaunay().find(mouseX(), mouseY());
+        console.log(closestPoint, midpoints());
+        if (isNaN(closestPoint)) return;
         setCurrentNodeVIndex(closestPoint);
         const closestNode = midpointsToNodes.get(
           pointToString(midpoints()[closestPoint])
