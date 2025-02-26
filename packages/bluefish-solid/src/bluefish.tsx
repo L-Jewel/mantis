@@ -775,12 +775,7 @@ export function Bluefish(props: BluefishProps) {
         (d) => d.y
       );
     const voronoi = () =>
-      delaunay().voronoi([
-        actualMinX(),
-        actualMinY(),
-        actualMinX() + actualWidth(),
-        actualMinY() + actualHeight(),
-      ]);
+      delaunay().voronoi([minX(), minY(), minX() + width(), minY() + height()]);
 
     // VISUAL LOGIC
     // Handles zoom-related functionalities
@@ -1011,7 +1006,6 @@ export function Bluefish(props: BluefishProps) {
       if (isTraversalType(props.mantisComponentType)) {
         // Finds the node closest to the cursor.
         const closestPoint = delaunay().find(mouseX(), mouseY());
-        console.log(closestPoint, midpoints());
         if (isNaN(closestPoint)) return;
         setCurrentNodeVIndex(closestPoint);
         const closestNode = midpointsToNodes.get(
