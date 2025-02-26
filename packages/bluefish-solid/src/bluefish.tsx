@@ -1201,9 +1201,8 @@ export function Bluefish(props: BluefishProps) {
       props: ParentProps & { id: number; lensInfo: LLensInfo }
     ) => {
       const STROKE_WIDTH_VAL = 8;
-      const LENS_RADIUS_VAL = 10 * MAGNIFICATION_DEFAULT;
       const LENS_RADIUS = () =>
-        `${LENS_RADIUS_VAL / magnificationFactor()}vmin`;
+        Math.min(actualWidth(), actualHeight()) / magnificationFactor() / 2;
       const lensID = () => `lensClip-${props.id}`;
 
       // On mount, set the initial conditions of the lens component.
