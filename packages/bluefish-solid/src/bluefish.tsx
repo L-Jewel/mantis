@@ -875,7 +875,6 @@ export function Bluefish(props: BluefishProps) {
       }
     }
     function endDrag() {
-      setIsDragging(false);
       if (isMiniMapContext(mantisContext)) mantisContext.setIsDragging(false);
       else if (isMultiLensContext(mantisContext)) {
         // TODO - Reactivity error? It works anyway so I will leave it for now.
@@ -906,6 +905,18 @@ export function Bluefish(props: BluefishProps) {
             magnification: MAGNIFICATION_DEFAULT,
           },
         ]);
+      }
+    }
+    /**
+     * For the multi-lens component, delete the lens that is currently being hovered over.
+     */
+    function deleteLens(event: MouseEvent) {
+      if (isMultiLensContext(mantisContext) && elementActive()) {
+        event.preventDefault();
+        console.log(mantisContext.lensInfo(), props.mantisId);
+        mantisContext.updateLensInfo((prevInfo) =>
+          prevInfo.filter((_, i) => i !== props.mantisId)
+        );
       }
     }
 
@@ -986,6 +997,15 @@ export function Bluefish(props: BluefishProps) {
           svgRef.addEventListener("mouseleave", endDrag, false);
           if (props.mantisComponentType === MantisComponentType.LLens) {
             svgRef.addEventListener("wheel", handleScroll, false);
+            svgRef.addEventListener(
+              "click",
+              (event) => {
+                if (event.shiftKey) {
+                  deleteLens(event);
+                }
+              },
+              false
+            );
           }
         } else if (props.mantisComponentType === MantisComponentType.LMain) {
           svgRef.addEventListener(
@@ -1216,13 +1236,15 @@ export function Bluefish(props: BluefishProps) {
       const lensID = () => `lensClip-${props.id}`;
 
       // On mount, set the initial conditions of the lens component.
-      onMount(() => {
-        setRectX(props.lensInfo.x);
-        setRectY(props.lensInfo.y);
-        zoomAroundPoint(
-          { x: rectX(), y: rectY() },
-          props.lensInfo.magnification
-        );
+      createEffect(() => {
+        if (!isDragging()) {
+          setRectX(props.lensInfo.x);
+          setRectY(props.lensInfo.y);
+          zoomAroundPoint(
+            { x: rectX(), y: rectY() },
+            props.lensInfo.magnification
+          );
+        }
       });
 
       return (
