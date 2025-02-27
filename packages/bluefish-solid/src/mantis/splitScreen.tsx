@@ -40,6 +40,7 @@ export const SplitScreen = (
         <Bluefish
           mantisComponentType={MantisComponentType.SSRight}
           mantisTraversalPattern={props.traversalPattern}
+          {...props}
         >
           {props.children}
         </Bluefish>
