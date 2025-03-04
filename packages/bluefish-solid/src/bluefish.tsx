@@ -608,7 +608,7 @@ export function Bluefish(props: BluefishProps) {
       props.mantisTraversalPattern === MantisTraversalPattern.Bubble
         ? 0.75
         : 1.25;
-    const SCROLL_DELTA = props.parameterOverrides?.scrollDelta ?? 0.4;
+    const SCROLL_DELTA = props.parameterOverrides?.scrollDelta ?? 0.2;
     const CURSOR_EPSILON = props.parameterOverrides?.cursorEpsilon ?? 3;
     const MAGNIFICATION_DEFAULT = 2;
 
@@ -767,11 +767,15 @@ export function Bluefish(props: BluefishProps) {
     // Keeps track of the user's view box (during GSAP transitions).
     const [gsapCenterX, setGsapCenterX] = createSignal(selNodeCenterX());
     const [gsapCenterY, setGsapCenterY] = createSignal(selNodeCenterY());
+    const [gsapWidth, setGsapWidth] = createSignal(magnificationWidth());
+    const [gsapHeight, setGsapHeight] = createSignal(magnificationHeight());
     const updateGSAPCenter = () => {
       if (svgRef) {
         const viewBox = svgRef.getAttribute("viewBox")?.split(" ");
         setGsapCenterX(parseFloat(viewBox![0]) + parseFloat(viewBox![2]) / 2);
         setGsapCenterY(parseFloat(viewBox![1]) + parseFloat(viewBox![3]) / 2);
+        setGsapWidth(parseFloat(viewBox![2]));
+        setGsapHeight(parseFloat(viewBox![3]));
       }
     };
 
@@ -819,12 +823,31 @@ export function Bluefish(props: BluefishProps) {
         svgRef.contains(elementUnderMouse)
       ) {
         event.preventDefault();
-        if (event.deltaY > 0) {
-          setMagnificationFactor(magnificationFactor() + SCROLL_DELTA);
-        } else {
-          setMagnificationFactor(
-            Math.max(1, magnificationFactor() - SCROLL_DELTA)
+        if (
+          props.mantisComponentType === MantisComponentType.LLens &&
+          isMultiLensContext(mantisContext)
+        ) {
+          // Zoom for Lens Component
+          const newMagnificationFactor =
+            event.deltaY > 0
+              ? magnificationFactor() + SCROLL_DELTA
+              : Math.max(1, magnificationFactor() - SCROLL_DELTA);
+          mantisContext.updateLensInfo((prevList) =>
+            prevList.map((item, i) =>
+              i === props.mantisId
+                ? { ...item, magnification: newMagnificationFactor }
+                : item
+            )
           );
+        } else {
+          // Zoom for all other components
+          if (event.deltaY > 0) {
+            setMagnificationFactor(magnificationFactor() + SCROLL_DELTA);
+          } else {
+            setMagnificationFactor(
+              Math.max(1, magnificationFactor() - SCROLL_DELTA)
+            );
+          }
         }
       }
     }
@@ -924,7 +947,6 @@ export function Bluefish(props: BluefishProps) {
     function deleteLens(event: MouseEvent) {
       if (isMultiLensContext(mantisContext) && elementActive()) {
         event.preventDefault();
-        console.log(mantisContext.lensInfo(), props.mantisId);
         mantisContext.updateLensInfo((prevInfo) =>
           prevInfo.filter((_, i) => i !== props.mantisId)
         );
@@ -954,6 +976,25 @@ export function Bluefish(props: BluefishProps) {
               duration: GSAP_DURATION,
               onUpdate: updateGSAPCenter,
             });
+            // TODO: Address the lag in the scroll.
+            // if (
+            //   prevMagnificationFactor !== undefined &&
+            //   prevMagnificationFactor !== magnificationFactor()
+            // ) {
+            //   // svgRef.setAttribute("viewBox", magnificationViewBox());
+            //   gsap.to(svgRef, {
+            //     attr: { viewBox: magnificationViewBox() },
+            //     duration: 0,
+            //     immediateRender: true,
+            //     onUpdate: updateGSAPCenter,
+            //   });
+            // } else {
+            //   gsap.to(svgRef, {
+            //     attr: { viewBox: magnificationViewBox() },
+            //     duration: GSAP_DURATION,
+            //     onUpdate: updateGSAPCenter,
+            //   });
+            // }
           }
         }
       }
@@ -1174,24 +1215,41 @@ export function Bluefish(props: BluefishProps) {
       });
 
       // Scale the dimensions of the arrowhead by the `magnificationFactor`.
-      const arrowLength = () =>
-        Math.min(actualWidth(), actualHeight()) / magnificationFactor() / 8; // Length of the arrowhead
-      const arrowBaseWidth = () =>
-        Math.min(actualWidth(), actualHeight()) / magnificationFactor() / 16; // Width of the arrowhead base
-      const arrowPadding = () =>
-        Math.min(actualWidth(), actualHeight()) / magnificationFactor() / 8; // Padding between the arrow and the edge of the view box
-      const notchDepth = () =>
-        Math.min(actualWidth(), actualHeight()) / magnificationFactor() / 16; // Depth of the arrowhead notch
+      const gsapMagnificationFactor = createMemo(
+        () => actualHeight() / gsapHeight()
+      );
+      const arrowLength = createMemo(
+        () =>
+          Math.min(actualWidth(), actualHeight()) /
+          gsapMagnificationFactor() /
+          8
+      ); // Length of the arrowhead
+      const arrowBaseWidth = createMemo(
+        () =>
+          Math.min(actualWidth(), actualHeight()) /
+          gsapMagnificationFactor() /
+          16
+      ); // Width of the arrowhead base
+      const arrowPadding = createMemo(
+        () =>
+          Math.min(actualWidth(), actualHeight()) /
+          gsapMagnificationFactor() /
+          8
+      ); // Padding between the arrow and the edge of the view box
+      const notchDepth = createMemo(
+        () =>
+          Math.min(actualWidth(), actualHeight()) /
+          gsapMagnificationFactor() /
+          16
+      ); // Depth of the arrowhead notch
       const arrowCenter = createMemo(() => {
         return {
           x:
             gsapCenterX() +
-            normalizedDirectionVector().x *
-              (magnificationWidth() / 2 - arrowPadding()),
+            normalizedDirectionVector().x * (gsapWidth() / 2 - arrowPadding()),
           y:
             gsapCenterY() +
-            normalizedDirectionVector().y *
-              (magnificationHeight() / 2 - arrowPadding()),
+            normalizedDirectionVector().y * (gsapHeight() / 2 - arrowPadding()),
         };
       });
       const notchLeft = createMemo(() => {
@@ -1238,13 +1296,10 @@ export function Bluefish(props: BluefishProps) {
             fill={mergedProps.arrowheadColor}
             stroke={"black"}
             stroke-width={0}
+            style={{
+              filter: `drop-shadow(${0.3 / gsapMagnificationFactor()}rem ${0.3 / gsapMagnificationFactor()}rem ${0.5 / gsapMagnificationFactor()}rem rgba(0, 0, 0, 0.7))`,
+            }}
           />
-          {/* <circle
-            cx={iconCenter().x}
-            cy={iconCenter().y}
-            r={5}
-            fill={"black"}
-          /> */}
         </>
       );
     };
@@ -1289,20 +1344,44 @@ export function Bluefish(props: BluefishProps) {
       props: ParentProps & { id: number; lensInfo: LLensInfo }
     ) => {
       const STROKE_WIDTH_VAL = 8;
+      const [lensScale, setLensScale] = createSignal(2);
       const LENS_RADIUS = () =>
-        Math.min(actualWidth(), actualHeight()) / magnificationFactor() / 2;
+        Math.min(actualWidth(), actualHeight()) /
+        magnificationFactor() /
+        lensScale();
       const lensID = () => `lensClip-${props.id}`;
 
       // On mount, set the initial conditions of the lens component.
       createEffect(() => {
+        // TODO - Something weird happens to the lenses on save.
         if (!isDragging()) {
           setRectX(props.lensInfo.x);
           setRectY(props.lensInfo.y);
+          setMagnificationFactor(props.lensInfo.magnification);
           zoomAroundPoint(
             { x: rectX(), y: rectY() },
             props.lensInfo.magnification
           );
         }
+      });
+
+      function changeLensSize(event: KeyboardEvent) {
+        if (elementActive()) {
+          if (event.key === "ArrowDown") {
+            setLensScale((prev) => prev + 0.1);
+          } else if (event.key === "ArrowUp") {
+            setLensScale((prev) => Math.max(prev - 0.1));
+          }
+        }
+      }
+
+      createEffect(() => {
+        if (svgRef) {
+          document.addEventListener("keydown", changeLensSize);
+        }
+        onCleanup(() => {
+          document.removeEventListener("keydown", changeLensSize);
+        });
       });
 
       return (
