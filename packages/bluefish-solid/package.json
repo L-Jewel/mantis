@@ -1,6 +1,6 @@
 {
   "name": "mantis-solid",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "A SolidJS screen magnification tool for diagram traversal.",
   "type": "module",
   "files": [

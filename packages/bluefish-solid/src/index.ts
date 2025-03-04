@@ -86,5 +86,6 @@ export {
   Preview,
   MultiLens,
   SplitScreen,
+  Basic,
   MantisTraversalPattern,
 } from "./mantis";
