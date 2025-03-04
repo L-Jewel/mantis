@@ -14,6 +14,7 @@ export enum MantisComponentType {
   SSRight,
   LMain,
   LLens,
+  Basic,
   PreviewPlanets,
   PreviewPythonTutor,
 }
@@ -50,6 +51,7 @@ export function isPreviewType(type: MantisComponentType | undefined) {
 export function isTraversalType(type: MantisComponentType | undefined) {
   return (
     type === MantisComponentType.MMMain ||
+    type === MantisComponentType.Basic ||
     isSplitScreenType(type) ||
     isPreviewType(type)
   );
@@ -91,12 +93,13 @@ export type MantisState =
       lensInfo: Accessor<LLensInfo[]>;
       updateLensInfo: Setter<LLensInfo[]>;
     }
-  | { type: "P" };
+  | { type: "P" }
+  | { type: "B" };
 
 const MantisContext = createContext<MantisState>();
 
 export const MantisProvider = (
-  props: ParentProps & { providerType: "MM" | "SS" | "L" | "P" }
+  props: ParentProps & { providerType: "MM" | "SS" | "L" | "P" | "B" }
 ) => {
   let providerState: MantisState | undefined;
 
@@ -133,6 +136,9 @@ export const MantisProvider = (
   } else if (props.providerType === "P") {
     // PREVIEW
     providerState = { type: "P" };
+  } else if (props.providerType === "B") {
+    // BASIC
+    providerState = { type: "B" };
   }
 
   return (

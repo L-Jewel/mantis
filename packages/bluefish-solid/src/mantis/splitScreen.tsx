@@ -5,6 +5,20 @@ import {
   MantisTraversalPattern,
 } from "./mantis";
 import Bluefish from "../bluefish";
+import "./splitScreen.css";
+
+const SplitScreenDivider = (props: { flexDirection: "row" | "column" }) => {
+  return (
+    <div
+      style={
+        props.flexDirection === "column"
+          ? { "border-bottom": ".2rem solid black", width: "100%" }
+          : { "border-right": ".2rem solid black", height: "100%" }
+      }
+      class="mantis-ss-divider"
+    />
+  );
+};
 
 export const SplitScreen = (
   props: ParentProps & {
@@ -28,6 +42,7 @@ export const SplitScreen = (
         height: "100%",
         "flex-direction": props.flexDirection,
       }}
+      class="mantis-split-screen"
     >
       <MantisProvider providerType="SS">
         <Bluefish
@@ -37,6 +52,7 @@ export const SplitScreen = (
         >
           {props.children}
         </Bluefish>
+        <SplitScreenDivider flexDirection={props.flexDirection} />
         <Bluefish
           mantisComponentType={MantisComponentType.SSRight}
           mantisTraversalPattern={props.traversalPattern}

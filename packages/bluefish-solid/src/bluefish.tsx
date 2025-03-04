@@ -26,7 +26,7 @@ import {
   createSignal,
   createUniqueId,
   mergeProps,
-  onMount,
+  onCleanup,
   untrack,
 } from "solid-js";
 import { ParentScopeIdContext, Scope, ScopeContext } from "./createName";
@@ -63,6 +63,10 @@ export type BluefishProps = ParentProps<{
   mantisId?: number;
   showVoronoi?: boolean;
   showHighlighting?: boolean;
+  parameterOverrides?: {
+    cursorEpsilon?: number;
+    scrollDelta?: number;
+  };
 }>;
 type BluefishNodeType = {
   type: "node";
@@ -250,6 +254,7 @@ export function Bluefish(props: BluefishProps) {
 
   // SCREEN MAGNIFICATION TRAVERSAL PROTOTYPING
   let svgRef: SVGSVGElement | undefined;
+  const showHighlighting = () => props.showHighlighting ?? false;
   const mantisContext = useMantisProvider();
   const [midpoints, setMidpoints] = createSignal<Point[]>([]);
   const midpointsToNodes = new Map<string, string>();
@@ -603,8 +608,8 @@ export function Bluefish(props: BluefishProps) {
       props.mantisTraversalPattern === MantisTraversalPattern.Bubble
         ? 0.75
         : 1.25;
-    const SCROLL_DELTA = 0.4;
-    const CURSOR_EPSILON = 5;
+    const SCROLL_DELTA = props.parameterOverrides?.scrollDelta ?? 0.4;
+    const CURSOR_EPSILON = props.parameterOverrides?.cursorEpsilon ?? 3;
     const MAGNIFICATION_DEFAULT = 2;
 
     // SVG View Box Information
@@ -654,6 +659,8 @@ export function Bluefish(props: BluefishProps) {
 
     // Calculates mouse position in SVG coordinates
     // Reference: https://github.com/enxaneta/SVG-mouse-position-in-svg/blob/master/mousePositionSVG.js
+    const [clientX, setClientX] = createSignal(0);
+    const [clientY, setClientY] = createSignal(0);
     const [mouseX, setMouseX] = createSignal(0);
     const [mouseY, setMouseY] = createSignal(0);
     const [elementActive, setElementActive] = createSignal(false);
@@ -749,10 +756,12 @@ export function Bluefish(props: BluefishProps) {
       createSignal(selNodeCenterX());
     const [magnificationCenterY, setMagnificationCenterY] =
       createSignal(selNodeCenterY());
-    const magnificationX = () =>
-      magnificationCenterX() - magnificationWidth() / 2;
-    const magnificationY = () =>
-      magnificationCenterY() - magnificationHeight() / 2;
+    const magnificationX = createMemo(
+      () => magnificationCenterX() - magnificationWidth() / 2
+    );
+    const magnificationY = createMemo(
+      () => magnificationCenterY() - magnificationHeight() / 2
+    );
     const magnificationViewBox = () =>
       `${magnificationX()} ${magnificationY()} ${magnificationWidth()} ${magnificationHeight()}`;
     // Keeps track of the user's view box (during GSAP transitions).
@@ -828,6 +837,8 @@ export function Bluefish(props: BluefishProps) {
         x: event.clientX,
         y: event.clientY,
       });
+      setClientX(event.clientX);
+      setClientY(event.clientY);
       if (mousePos) {
         setMouseX(mousePos.x);
         setMouseY(mousePos.y);
@@ -1019,6 +1030,51 @@ export function Bluefish(props: BluefishProps) {
           );
         }
       }
+
+      onCleanup(() => {
+        if (svgRef) {
+          document.removeEventListener("keydown", handleKeyPress);
+          document.removeEventListener("mousemove", detectElementActive);
+          svgRef.removeEventListener(
+            "mousemove",
+            (e) => {
+              if (mouseActive()) handleMouseMove(e);
+              handleDrag(e);
+            },
+            false
+          );
+          if (isTraversalType(props.mantisComponentType)) {
+            svgRef.removeEventListener("click", zoomInNode, false);
+            svgRef.removeEventListener("wheel", handleScroll, false);
+          } else if (isDraggableType(props.mantisComponentType)) {
+            svgRef.removeEventListener("mousedown", handleMouseDown, false);
+            svgRef.removeEventListener("mouseup", endDrag, false);
+            svgRef.removeEventListener("mouseleave", endDrag, false);
+            if (props.mantisComponentType === MantisComponentType.LLens) {
+              svgRef.removeEventListener("wheel", handleScroll, false);
+              svgRef.removeEventListener(
+                "click",
+                (event) => {
+                  if (event.shiftKey) {
+                    deleteLens(event);
+                  }
+                },
+                false
+              );
+            }
+          } else if (props.mantisComponentType === MantisComponentType.LMain) {
+            svgRef.removeEventListener(
+              "click",
+              (event) => {
+                if (event.shiftKey) {
+                  addLens(event);
+                }
+              },
+              false
+            );
+          }
+        }
+      });
     });
 
     // Navigational Logic (Traversal Type Components)
@@ -1043,14 +1099,14 @@ export function Bluefish(props: BluefishProps) {
           setRectWidth(selNodeWidth());
         } else {
           setMagnificationCenterX((currX: number) => {
-            return Math.abs(currX - mouseX()) > CURSOR_EPSILON
-              ? mouseX()
-              : currX;
+            const newX =
+              Math.abs(currX - mouseX()) > CURSOR_EPSILON ? mouseX() : currX;
+            return Math.max(minX(), Math.min(newX, minX() + width()));
           });
           setMagnificationCenterY((currY: number) => {
-            return Math.abs(currY - mouseY()) > CURSOR_EPSILON
-              ? mouseY()
-              : currY;
+            const newY =
+              Math.abs(currY - mouseY()) > CURSOR_EPSILON ? mouseY() : currY;
+            return Math.max(minY(), Math.min(newY, minY() + height()));
           });
         }
         // SPLIT SCREEN - Put this component's view box into the global context.
@@ -1210,15 +1266,17 @@ export function Bluefish(props: BluefishProps) {
 
       return (
         <>
-          <rect
-            x={vbX()}
-            y={vbY()}
-            width={vbW()}
-            height={vbH()}
-            fill="transparent"
-            stroke={props.stroke}
-            stroke-width={props.strokeWidth}
-          />
+          {showHighlighting() && (
+            <rect
+              x={vbX()}
+              y={vbY()}
+              width={vbW()}
+              height={vbH()}
+              fill="transparent"
+              stroke={props.stroke}
+              stroke-width={props.strokeWidth}
+            />
+          )}
           {isZoomed() &&
             props.viewBox &&
             !viewBoxOverlaps(magnificationViewBox(), props.viewBox) && (
@@ -1339,7 +1397,7 @@ export function Bluefish(props: BluefishProps) {
                   </For>
                 </Show>
                 {/* Dynamic Highlighting */}
-                <Show when={props.showHighlighting}>
+                <Show when={showHighlighting()}>
                   {/* Highlight Selected Node */}
                   <rect
                     stroke="green"

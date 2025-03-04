@@ -1,0 +1,5 @@
+/* Fixes a weird issue where the left-right split screen has unwanted spacing. */
+.mantis-split-screen > div:not(.mantis-ss-divider) {
+    max-width: 0;
+    height: 0;
+}
