@@ -5,7 +5,17 @@ import {
   MantisTraversalPattern,
 } from "./mantis";
 import Bluefish from "../bluefish";
-import "./splitScreen.css";
+
+// Adds some CSS that fixes the split screen issue.
+const styles = `
+.mantis-split-screen > div:not(.mantis-ss-divider) {
+    max-width: 0;
+    height: 0;
+}
+`;
+const styleSheet = document.createElement("style");
+styleSheet.innerText = styles;
+document.head.appendChild(styleSheet);
 
 const SplitScreenDivider = (props: { flexDirection: "row" | "column" }) => {
   return (
