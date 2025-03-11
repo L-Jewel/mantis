@@ -1,5 +1,5 @@
 import { ParentProps } from "solid-js";
-import Bluefish from "../bluefish";
+import Bluefish, { MantisOverrides } from "../bluefish";
 import {
   MantisProvider,
   MantisComponentType,
@@ -11,6 +11,7 @@ export const MiniMap = (
     traversalPattern?: MantisTraversalPattern;
     showVoronoi?: boolean;
     showHighlighting?: boolean;
+    parameterOverrides?: MantisOverrides;
   }
 ) => {
   /**

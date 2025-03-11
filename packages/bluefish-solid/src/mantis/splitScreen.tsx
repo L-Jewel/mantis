@@ -4,7 +4,7 @@ import {
   MantisProvider,
   MantisTraversalPattern,
 } from "./mantis";
-import Bluefish from "../bluefish";
+import Bluefish, { MantisOverrides } from "../bluefish";
 
 // Adds some CSS that fixes the split screen issue.
 const styles = `
@@ -36,6 +36,7 @@ export const SplitScreen = (
     flexDirection: "row" | "column";
     showVoronoi?: boolean;
     showHighlighting?: boolean;
+    parameterOverrides?: MantisOverrides;
   }
 ) => {
   /**

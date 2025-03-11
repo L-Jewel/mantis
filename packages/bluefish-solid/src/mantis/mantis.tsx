@@ -21,6 +21,7 @@ export enum MantisComponentType {
 export enum MantisTraversalPattern {
   Bubble,
   Cursor,
+  Joystick,
 }
 
 /**

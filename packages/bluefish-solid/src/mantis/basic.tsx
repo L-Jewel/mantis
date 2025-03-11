@@ -4,13 +4,14 @@ import {
   MantisProvider,
   MantisTraversalPattern,
 } from "./mantis";
-import Bluefish from "../bluefish";
+import Bluefish, { MantisOverrides } from "../bluefish";
 
 export const Basic = (
   props: ParentProps & {
     traversalPattern?: MantisTraversalPattern;
     showVoronoi?: boolean;
     showHighlighting?: boolean;
+    parameterOverrides?: MantisOverrides;
   }
 ) => {
   return (

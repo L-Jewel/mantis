@@ -6,9 +6,11 @@ import {
   MantisTraversalPattern,
   useMantisProvider,
 } from "./mantis";
-import Bluefish from "../bluefish";
+import Bluefish, { MantisOverrides } from "../bluefish";
 
-const LensArray = (props: ParentProps) => {
+const LensArray = (
+  props: ParentProps & { traversalPattern?: MantisTraversalPattern }
+) => {
   const mantisContext = useMantisProvider();
   const lensInfo = () =>
     isMultiLensContext(mantisContext) ? mantisContext.lensInfo() : [];
@@ -20,6 +22,7 @@ const LensArray = (props: ParentProps) => {
           <Bluefish
             mantisComponentType={MantisComponentType.LLens}
             mantisId={index}
+            mantisTraversalPattern={props.traversalPattern}
           >
             {props.children}
           </Bluefish>
@@ -32,6 +35,7 @@ const LensArray = (props: ParentProps) => {
 export const MultiLens = (
   props: ParentProps & {
     traversalPattern?: MantisTraversalPattern;
+    parameterOverrides?: MantisOverrides;
   }
 ) => {
   return (
@@ -43,7 +47,7 @@ export const MultiLens = (
         >
           {props.children}
         </Bluefish>
-        <LensArray>{props.children}</LensArray>
+        <LensArray {...props}>{props.children}</LensArray>
       </MantisProvider>
     </div>
   );

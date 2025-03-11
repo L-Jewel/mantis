@@ -51,6 +51,13 @@ import {
   useMantisProvider,
 } from "./mantis";
 
+export type MantisOverrides = {
+  cursorEpsilon?: number;
+  traditionalEpsilon?: number;
+  scrollDelta?: number;
+  zoomLevel?: number;
+  gsapDuration?: number;
+};
 export type BluefishProps = ParentProps<{
   width?: number;
   height?: number;
@@ -63,10 +70,7 @@ export type BluefishProps = ParentProps<{
   mantisId?: number;
   showVoronoi?: boolean;
   showHighlighting?: boolean;
-  parameterOverrides?: {
-    cursorEpsilon?: number;
-    scrollDelta?: number;
-  };
+  parameterOverrides?: MantisOverrides;
 }>;
 type BluefishNodeType = {
   type: "node";
@@ -482,6 +486,19 @@ export function Bluefish(props: BluefishProps) {
         return {};
     }
   }
+  /**
+   * @returns the color of the cursor based on the component type
+   */
+  function getCursorColor(): string {
+    switch (props.mantisComponentType) {
+      case MantisComponentType.SSLeft:
+        return "orange";
+      case MantisComponentType.SSRight:
+        return "blue";
+      default:
+        return "red";
+    }
+  }
 
   // Calculate the midpoint of each node (Traversal Components Only)
   createEffect(() => {
@@ -522,7 +539,10 @@ export function Bluefish(props: BluefishProps) {
       }
 
       setMidpoints(newMidpoints);
-    } else if (isTraversalType(props.mantisComponentType)) {
+    } else if (
+      isTraversalType(props.mantisComponentType) ||
+      props.mantisComponentType === MantisComponentType.LLens
+    ) {
       const newMidpoints = [];
 
       for (const nodeId in scenegraph) {
@@ -605,11 +625,14 @@ export function Bluefish(props: BluefishProps) {
   }) => {
     // "GLOBAL" CONSTANTS
     const GSAP_DURATION =
-      props.mantisTraversalPattern === MantisTraversalPattern.Bubble
+      props.parameterOverrides?.gsapDuration ??
+      (props.mantisTraversalPattern === MantisTraversalPattern.Bubble
         ? 0.75
-        : 1.25;
+        : 1.25);
     const SCROLL_DELTA = props.parameterOverrides?.scrollDelta ?? 0.2;
     const CURSOR_EPSILON = props.parameterOverrides?.cursorEpsilon ?? 3;
+    const TRADITIONAL_EPSILON =
+      (props.parameterOverrides?.traditionalEpsilon ?? 1) * 100;
     const MAGNIFICATION_DEFAULT = 2;
 
     // SVG View Box Information
@@ -744,6 +767,15 @@ export function Bluefish(props: BluefishProps) {
 
     // Magnification Information (i.e. the user's view box)
     const [magnificationFactor, setMagnificationFactor] = createSignal(1);
+    // Callback to let the top level parent component set the magnification factor.
+    createEffect(() => {
+      if (
+        isTraversalType(props.mantisComponentType) &&
+        props.parameterOverrides?.zoomLevel
+      ) {
+        setMagnificationFactor(props.parameterOverrides.zoomLevel);
+      }
+    });
     const magnificationWidth = () =>
       props.mantisComponentType === MantisComponentType.LLens
         ? width() / magnificationFactor()
@@ -1130,7 +1162,7 @@ export function Bluefish(props: BluefishProps) {
         );
         setCurrentNodeId(resolveNode(closestNode ?? id));
         if (props.mantisTraversalPattern === MantisTraversalPattern.Bubble) {
-          // Update the user's view to center around that node.
+          // Update the user's view to center around the selected node.
           setMagnificationCenterX(selNodeCenterX());
           setMagnificationCenterY(selNodeCenterY());
 
@@ -1138,7 +1170,61 @@ export function Bluefish(props: BluefishProps) {
           setRectY(selNodeY());
           setRectHeight(selNodeHeight());
           setRectWidth(selNodeWidth());
+        } else if (
+          props.mantisTraversalPattern === MantisTraversalPattern.Joystick
+        ) {
+          // Mirrors the traditional behavior of screen magnifiers. In other words, it allows
+          // the user to move their mouse around, but only moves the screen around when the mouse
+          // is near the edge of the screen.
+          /**
+           * Updates the magnification center based on the current position, mouse position, and boundaries.
+           *
+           * @param current - The current magnification center position.
+           * @param mouse - The current mouse position.
+           * @param min - The minimum boundary for the magnification center.
+           * @param max - The maximum boundary for the magnification center.
+           * @param length - The total length of the area being magnified.
+           * @returns The updated magnification center position.
+           */
+          const updateMagnificationCenter = (
+            current: number,
+            mouse: number,
+            min: number,
+            max: number,
+            length: number
+          ) => {
+            const edgeThreshold = length / 6; // Distance from the edge of the screen to start scrolling
+
+            if (mouse < min + edgeThreshold) {
+              return Math.max(min, current - TRADITIONAL_EPSILON);
+            } else if (mouse > max - edgeThreshold) {
+              return Math.min(max, current + TRADITIONAL_EPSILON);
+            }
+            return current;
+          };
+
+          setMagnificationCenterX((currX) => {
+            const newX = updateMagnificationCenter(
+              currX,
+              mouseX(),
+              magnificationX(),
+              magnificationX() + magnificationWidth(),
+              magnificationWidth()
+            );
+            return Math.max(minX(), Math.min(newX, minX() + width()));
+          });
+          setMagnificationCenterY((currY) => {
+            const newY = updateMagnificationCenter(
+              currY,
+              mouseY(),
+              magnificationY(),
+              magnificationY() + magnificationHeight(),
+              magnificationHeight()
+            );
+            return Math.max(minY(), Math.min(newY, minY() + height()));
+          });
         } else {
+          // A more free form traversal pattern. The center of the screen just follows the mouse.
           setMagnificationCenterX((currX: number) => {
             const newX =
               Math.abs(currX - mouseX()) > CURSOR_EPSILON ? mouseX() : currX;
@@ -1335,13 +1421,16 @@ export function Bluefish(props: BluefishProps) {
           {isZoomed() &&
             props.viewBox &&
             !viewBoxOverlaps(magnificationViewBox(), props.viewBox) && (
-              <OffScreenArrow targetPoint={vbCenterPoint()} />
+              <OffScreenArrow
+                targetPoint={vbCenterPoint()}
+                arrowheadColor={props.stroke}
+              />
             )}
         </>
       );
     };
     const LensClipPath = (
-      props: ParentProps & { id: number; lensInfo: LLensInfo }
+      props: ParentProps & { id: number; lensInfo: LLensInfo; snap?: boolean }
     ) => {
       const STROKE_WIDTH_VAL = 8;
       const [lensScale, setLensScale] = createSignal(2);
@@ -1355,8 +1444,22 @@ export function Bluefish(props: BluefishProps) {
       createEffect(() => {
         // TODO - Something weird happens to the lenses on save.
         if (!isDragging()) {
-          setRectX(props.lensInfo.x);
-          setRectY(props.lensInfo.y);
+          // If snapping is enabled, the lens snaps to the nearest node when it's not being dragged.
+          // Otherwise, the lens stays where the mouse leaves it.
+          if (props.snap) {
+            // Finds the node closest to the lens.
+            const closestPointIndex = delaunay().find(
+              props.lensInfo.x,
+              props.lensInfo.y
+            );
+            if (isNaN(closestPointIndex)) return;
+            const closestPoint = midpoints()[closestPointIndex];
+            setRectX(closestPoint.x);
+            setRectY(closestPoint.y);
+          } else {
+            setRectX(props.lensInfo.x);
+            setRectY(props.lensInfo.y);
+          }
           setMagnificationFactor(props.lensInfo.magnification);
           zoomAroundPoint(
             { x: rectX(), y: rectY() },
@@ -1451,6 +1554,10 @@ export function Bluefish(props: BluefishProps) {
                 <LensClipPath
                   id={props.mantisId}
                   lensInfo={mantisContext.lensInfo()[props.mantisId]}
+                  snap={
+                    props.mantisTraversalPattern ===
+                    MantisTraversalPattern.Bubble
+                  }
                 >
                   {paintProps.children}
                 </LensClipPath>
@@ -1593,12 +1700,12 @@ export function Bluefish(props: BluefishProps) {
                 : mantisContext.leftViewBBox() !== defaultViewBox() && (
                     <ViewBoxRect
                       viewBox={mantisContext.leftViewBBox()}
-                      stroke="blue"
+                      stroke="orange"
                       strokeWidth={2}
                     />
                   ))}
             {/* Cursor Position */}
-            <circle cx={mouseX()} cy={mouseY()} r={3} fill="red" />
+            <circle cx={mouseX()} cy={mouseY()} r={3} fill={getCursorColor()} />
           </>
         )}
       </svg>

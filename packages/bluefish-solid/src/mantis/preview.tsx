@@ -1,5 +1,5 @@
 import { ParentProps } from "solid-js";
-import Bluefish from "../bluefish";
+import Bluefish, { MantisOverrides } from "../bluefish";
 import {
   MantisComponentType,
   MantisProvider,
@@ -12,6 +12,7 @@ export const Preview = (
     diagram: "Planets" | "Python-Tutor";
     showVoronoi?: boolean;
     showHighlighting?: boolean;
+    parameterOverrides?: MantisOverrides;
   }
 ) => {
   return (
