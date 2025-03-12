@@ -751,11 +751,20 @@ export function Bluefish(props: BluefishProps) {
       setMagnificationCenterX(newCenterX);
       setMagnificationCenterY(newCenterY);
     }
-    function detectElementActive(event: MouseEvent): void {
-      const elementUnderMouse = document.elementFromPoint(
-        event.clientX,
-        event.clientY
-      );
+    function detectElementActive(event: MouseEvent | TouchEvent): void {
+      let elementUnderMouse;
+      if (event instanceof MouseEvent) {
+        elementUnderMouse = document.elementFromPoint(
+          event.clientX,
+          event.clientY
+        );
+      } else if (event instanceof TouchEvent && event.touches.length > 0) {
+        elementUnderMouse = document.elementFromPoint(
+          event.touches[0].clientX,
+          event.touches[0].clientY
+        );
+        event.preventDefault();
+      }
       if (elementUnderMouse && svgRef && svgRef.contains(elementUnderMouse)) {
         setElementActive(true);
       } else {
@@ -902,23 +911,66 @@ export function Bluefish(props: BluefishProps) {
     const [dragStartX, setDragStartX] = createSignal(0);
     const [dragStartY, setDragStartY] = createSignal(0);
     const [isDragging, setIsDragging] = createSignal(false);
-    function handleMouseMove(event: MouseEvent) {
-      const mousePos = getMousePositionSVG({
-        x: event.clientX,
-        y: event.clientY,
-      });
-      setClientX(event.clientX);
-      setClientY(event.clientY);
+    function handleMouseMove(event: MouseEvent | TouchEvent) {
+      let clientX, clientY;
+      if (event instanceof MouseEvent) {
+        clientX = event.clientX;
+        clientY = event.clientY;
+      } else if (
+        event instanceof TouchEvent &&
+        event.touches.length > 0 &&
+        props.mantisComponentType !== MantisComponentType.LLens
+      ) {
+        event.preventDefault();
+        // Support for "pinch to zoom" on mobile devices
+        if (isZoomed() && event.touches.length === 2) {
+          const currPointer1 = event.touches[0];
+          const currPointer2 = event.touches[1];
+          const currDiff = Math.sqrt(
+            Math.pow(currPointer1.clientX - currPointer2.clientX, 2) +
+              Math.pow(currPointer1.clientY - currPointer2.clientY, 2)
+          );
+
+          if (prevPinchDiff > 0) {
+            if (currDiff > prevPinchDiff) {
+              setMagnificationFactor(magnificationFactor() + SCROLL_DELTA);
+            } else {
+              setMagnificationFactor(
+                Math.max(1, magnificationFactor() - SCROLL_DELTA)
+              );
+            }
+          }
+          prevPinchDiff = currDiff;
+          return;
+        }
+        // Otherwise, if they're not pinching, just move the cursor.
+        clientX = event.touches[0].clientX;
+        clientY = event.touches[0].clientY;
+      } else {
+        return;
+      }
+
+      const mousePos = getMousePositionSVG({ x: clientX, y: clientY });
+      setClientX(clientX);
+      setClientY(clientY);
       if (mousePos) {
         setMouseX(mousePos.x);
         setMouseY(mousePos.y);
       }
     }
-    function handleMouseDown(event: MouseEvent) {
-      const mousePos = getMousePositionSVG({
-        x: event.clientX,
-        y: event.clientY,
-      });
+    function handleMouseDown(event: MouseEvent | TouchEvent) {
+      let mousePos;
+      if (event instanceof MouseEvent) {
+        mousePos = getMousePositionSVG({
+          x: event.clientX,
+          y: event.clientY,
+        });
+      } else if (event instanceof TouchEvent && event.touches.length > 0) {
+        mousePos = getMousePositionSVG({
+          x: event.touches[0].clientX,
+          y: event.touches[0].clientY,
+        });
+      }
       if (!mousePos) return;
       if (isMiniMapContext(mantisContext)) {
         mantisContext.setIsDragging(true);
@@ -934,11 +986,20 @@ export function Bluefish(props: BluefishProps) {
         setIsDragging(true);
       }
     }
-    function handleDrag(event: MouseEvent) {
-      const mousePos = getMousePositionSVG({
-        x: event.clientX,
-        y: event.clientY,
-      });
+    function handleDrag(event: MouseEvent | TouchEvent) {
+      let clientX, clientY;
+      if (event instanceof MouseEvent) {
+        clientX = event.clientX;
+        clientY = event.clientY;
+      } else if (event instanceof TouchEvent && event.touches.length > 0) {
+        clientX = event.touches[0].clientX;
+        clientY = event.touches[0].clientY;
+        event.preventDefault();
+      } else {
+        return;
+      }
+
+      const mousePos = getMousePositionSVG({ x: clientX, y: clientY });
       if (!mousePos) return;
       if (isMiniMapContext(mantisContext) && mantisContext.isDragging()) {
         setRectX(mousePos.x - dragStartX());
@@ -1055,6 +1116,8 @@ export function Bluefish(props: BluefishProps) {
     });
 
     // SVG Event Listeners
+    // Pinch-to-Zoom Support (Mobile)
+    let prevPinchDiff = -1; // The previous distance between two fingers
     /**
      * Handles the "keydown" event.
      * When the 'f' key is pressed, toggle whether or not the mouse is frozen on the
@@ -1079,6 +1142,7 @@ export function Bluefish(props: BluefishProps) {
       if (svgRef) {
         document.addEventListener("keydown", handleKeyPress);
         document.addEventListener("mousemove", detectElementActive);
+        document.addEventListener("touchmove", detectElementActive);
         svgRef.addEventListener(
           "mousemove",
           (e) => {
@@ -1087,13 +1151,30 @@ export function Bluefish(props: BluefishProps) {
           },
           false
         );
+        svgRef.addEventListener(
+          "touchmove",
+          (e) => {
+            if (mouseActive()) handleMouseMove(e);
+            handleDrag(e);
+          },
+          false
+        );
+        svgRef.addEventListener(
+          "touchend",
+          () => {
+            prevPinchDiff = -1;
+          },
+          false
+        );
         if (isTraversalType(props.mantisComponentType)) {
           svgRef.addEventListener("click", zoomInNode, false);
           svgRef.addEventListener("wheel", handleScroll, false);
         } else if (isDraggableType(props.mantisComponentType)) {
           svgRef.addEventListener("mousedown", handleMouseDown, false);
+          svgRef.addEventListener("touchstart", handleMouseDown, false);
           svgRef.addEventListener("mouseup", endDrag, false);
           svgRef.addEventListener("mouseleave", endDrag, false);
+          svgRef.addEventListener("touchend", endDrag, false);
           if (props.mantisComponentType === MantisComponentType.LLens) {
             svgRef.addEventListener("wheel", handleScroll, false);
             svgRef.addEventListener(
@@ -1123,6 +1204,7 @@ export function Bluefish(props: BluefishProps) {
         if (svgRef) {
           document.removeEventListener("keydown", handleKeyPress);
           document.removeEventListener("mousemove", detectElementActive);
+          document.removeEventListener("touchmove", detectElementActive);
           svgRef.removeEventListener(
             "mousemove",
             (e) => {
@@ -1131,13 +1213,30 @@ export function Bluefish(props: BluefishProps) {
             },
             false
           );
+          svgRef.removeEventListener(
+            "touchmove",
+            (e) => {
+              if (mouseActive()) handleMouseMove(e);
+              handleDrag(e);
+            },
+            false
+          );
+          svgRef.removeEventListener(
+            "touchend",
+            () => {
+              prevPinchDiff = -1;
+            },
+            false
+          );
           if (isTraversalType(props.mantisComponentType)) {
             svgRef.removeEventListener("click", zoomInNode, false);
             svgRef.removeEventListener("wheel", handleScroll, false);
           } else if (isDraggableType(props.mantisComponentType)) {
             svgRef.removeEventListener("mousedown", handleMouseDown, false);
+            svgRef.removeEventListener("touchstart", handleMouseDown, false);
             svgRef.removeEventListener("mouseup", endDrag, false);
             svgRef.removeEventListener("mouseleave", endDrag, false);
+            svgRef.removeEventListener("touchend", endDrag, false);
             if (props.mantisComponentType === MantisComponentType.LLens) {
               svgRef.removeEventListener("wheel", handleScroll, false);
               svgRef.removeEventListener(
