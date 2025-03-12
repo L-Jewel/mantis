@@ -765,7 +765,12 @@ export function Bluefish(props: BluefishProps) {
         );
         event.preventDefault();
       }
-      if (elementUnderMouse && svgRef && svgRef.contains(elementUnderMouse)) {
+      if (
+        elementUnderMouse &&
+        svgRef &&
+        svgRef.contains(elementUnderMouse) &&
+        elementUnderMouse.id !== "mantis-ui-arrow"
+      ) {
         setElementActive(true);
       } else {
         setElementActive(false);
@@ -850,7 +855,7 @@ export function Bluefish(props: BluefishProps) {
     // Handles zoom-related functionalities
     const [isZoomed, setIsZoomed] = createSignal(false);
     function zoomInNode() {
-      if (svgRef) {
+      if (svgRef && elementActive()) {
         if (isZoomed()) {
           gsap.to(svgRef, {
             attr: { viewBox: defaultViewBox() },
@@ -1393,6 +1398,7 @@ export function Bluefish(props: BluefishProps) {
     const OffScreenArrow = (props: {
       targetPoint: Point;
       arrowheadColor?: string;
+      onClick?: () => void;
     }) => {
       // CONSTANTS
       const mergedProps = mergeProps({ arrowheadColor: "purple" }, props);
@@ -1492,12 +1498,17 @@ export function Bluefish(props: BluefishProps) {
       return (
         <>
           <polygon
+            id="mantis-ui-arrow"
             points={`${arrowTip().x},${arrowTip().y} ${notchLeft().x},${notchLeft().y} ${arrowCenter().x},${arrowCenter().y} ${notchRight().x},${notchRight().y}`}
             fill={mergedProps.arrowheadColor}
             stroke={"black"}
             stroke-width={0}
             style={{
               filter: `drop-shadow(${0.3 / gsapMagnificationFactor()}rem ${0.3 / gsapMagnificationFactor()}rem ${0.5 / gsapMagnificationFactor()}rem rgba(0, 0, 0, 0.7))`,
+            }}
+            onClick={(e) => {
+              e.stopImmediatePropagation();
+              if (props.onClick) props.onClick();
             }}
           />
         </>
@@ -1781,6 +1792,10 @@ export function Bluefish(props: BluefishProps) {
                           <OffScreenArrow
                             targetPoint={neighborNodeMidpoint()}
                             arrowheadColor={arrowColor()}
+                            onClick={() => {
+                              setMagnificationCenterX(neighborNodeMidpoint().x);
+                              setMagnificationCenterY(neighborNodeMidpoint().y);
+                            }}
                           />
                         </Show>
                       );
