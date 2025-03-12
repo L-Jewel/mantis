@@ -94,6 +94,10 @@ type ViewBox = {
   height: number;
 };
 
+/**
+ * Preview/Enemy Indicator Prototype Only.
+ * @returns A map that maps a node to a list of nodes related to it.
+ */
 const getNodeRelations = (
   type: MantisComponentType | undefined
 ): Map<string, string[]> => {
@@ -153,6 +157,10 @@ const getNodeRelations = (
     }
   }
 };
+/**
+ * Preview/Enemy Indicator Prototype Only.
+ * @returns a list of the salient nodes in the given diagram
+ */
 const getImportantNodes = (
   type: MantisComponentType | undefined
 ): Set<string> => {
@@ -309,6 +317,10 @@ export function Bluefish(props: BluefishProps) {
       return parentTransform;
     }
   }
+  /**
+   * @param nodeIds a list of scenegraph node IDs
+   * @returns the smalled bounding box that contains all the nodes in `nodeIds`
+   */
   function computeBoundingBoxUnion(nodeIds: string[]): {
     left: number;
     top: number;
@@ -379,6 +391,10 @@ export function Bluefish(props: BluefishProps) {
       height: unionBBox.bottom - unionBBox.top,
     };
   }
+  /**
+   * @param nodeId a string that corresponds to the ID of an arrow node in the scenegraph
+   * @returns the arrow's bounding box
+   */
   function computeBoundingBoxArrow(nodeId: string): {
     left: number;
     top: number;
@@ -636,7 +652,6 @@ export function Bluefish(props: BluefishProps) {
     const MAGNIFICATION_DEFAULT = 2;
 
     // SVG View Box Information
-    // TODO: Not matching the actual width and height of the SVG
     const width = () =>
       props.width ?? (paintProps.bbox.width ?? 0) + props.padding! * 2;
     const height = () =>
