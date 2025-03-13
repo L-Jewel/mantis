@@ -161,7 +161,7 @@ const getNodeRelations = (
  * Preview/Enemy Indicator Prototype Only.
  * @returns a list of the salient nodes in the given diagram
  */
-const getImportantNodes = (
+const getPreviewNodes = (
   type: MantisComponentType | undefined
 ): Set<string> => {
   switch (type) {
@@ -268,14 +268,15 @@ export function Bluefish(props: BluefishProps) {
   let svgRef: SVGSVGElement | undefined;
   const showHighlighting = () => props.showHighlighting ?? false;
   const mantisContext = useMantisProvider();
-  const [midpoints, setMidpoints] = createSignal<Point[]>([]);
+  const [bubbleMidpoints, setBubbleMidpoints] = createSignal<Point[]>([]);
+  const [previewMidpoints, setPreviewMidpoints] = createSignal<Point[]>([]);
   const midpointsToNodes = new Map<string, string>();
   /**
    * scopeName <=> nodeId
    */
   const scopeMap = new BiMap<string, string>();
   const nodeRelations = () => getNodeRelations(props.mantisComponentType);
-  const importantNodes = () => getImportantNodes(props.mantisComponentType);
+  const previewNodes = () => getPreviewNodes(props.mantisComponentType);
   // Helper functions
   /**
    * @param nodeId a string that corresponds to the ID of a node in the scenegraph
@@ -528,7 +529,8 @@ export function Bluefish(props: BluefishProps) {
   // Calculate the midpoint of each node (Traversal Components Only)
   createEffect(() => {
     if (isPreviewType(props.mantisComponentType)) {
-      const newMidpoints = [];
+      const newBubbleMidpoints: Point[] = [];
+      const newPreviewMidpoints: Point[] = [];
       /**
        * Sometimes, the name of the node contains a changing ID. With this
        * function, we can just use the part of the name that doesn't change
@@ -545,13 +547,14 @@ export function Bluefish(props: BluefishProps) {
         return undefined;
       };
 
-      for (const iNode of importantNodes()) {
+      for (const iNode of previewNodes()) {
         const iNodeActual = findKeyInScope(iNode);
         if (!iNodeActual) continue;
         scopeMap.set(iNode, scope[iNodeActual].layoutNode ?? "");
       }
+      const previewNodeIds = new Set(scopeMap.getValues());
 
-      for (const nodeId of scopeMap.getValues()) {
+      for (const nodeId in scenegraph) {
         if (getNodeType(nodeId) === "Ref") continue;
         const nodeBbox = getBbox(nodeId);
         const nodeTransform = calculateTransform(nodeId);
@@ -559,11 +562,13 @@ export function Bluefish(props: BluefishProps) {
           x: nodeTransform.x + (nodeBbox.left ?? 0) + (nodeBbox.width ?? 0) / 2,
           y: nodeTransform.y + (nodeBbox.top ?? 0) + (nodeBbox.height ?? 0) / 2,
         };
-        newMidpoints.push(nodeMidpoint);
+        newBubbleMidpoints.push(nodeMidpoint);
         midpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
+        if (previewNodeIds.has(nodeId)) newPreviewMidpoints.push(nodeMidpoint);
       }
 
-      setMidpoints(newMidpoints);
+      setBubbleMidpoints(newBubbleMidpoints);
+      setPreviewMidpoints(newPreviewMidpoints);
     } else if (
       isTraversalType(props.mantisComponentType) ||
       props.mantisComponentType === MantisComponentType.LLens
@@ -582,12 +587,14 @@ export function Bluefish(props: BluefishProps) {
         midpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
       }
 
-      setMidpoints(newMidpoints);
+      setBubbleMidpoints(newMidpoints);
     }
   });
 
   // Information about the currently selected node
-  const [currentNodeVIndex, setCurrentNodeVIndex] = createSignal(-1);
+  const [currentNodeBubbleIndex, setCurrentNodeBubbleIndex] = createSignal(-1);
+  const [currentNodePreviewIndex, setCurrentNodePreviewIndex] =
+    createSignal(-1);
   const [currentNodeId, setCurrentNodeId] = createSignal<string>(id);
   const currentNode = () =>
     scenegraphSignal().scenegraph[currentNodeId()] as BluefishNodeType;
@@ -851,14 +858,32 @@ export function Bluefish(props: BluefishProps) {
 
     // Voronoi Calculation
     // TODO - For performance, maybe only calculate this for certain component types
-    const delaunay = () =>
+    const bubbleDelaunay = () =>
       d3.Delaunay.from(
-        midpoints(),
+        bubbleMidpoints(),
         (d) => d.x,
         (d) => d.y
       );
-    const voronoi = () =>
-      delaunay().voronoi([minX(), minY(), minX() + width(), minY() + height()]);
+    const previewDelaunay = () =>
+      d3.Delaunay.from(
+        previewMidpoints(),
+        (d) => d.x,
+        (d) => d.y
+      );
+    const bubbleVoronoi = () =>
+      bubbleDelaunay().voronoi([
+        minX(),
+        minY(),
+        minX() + width(),
+        minY() + height(),
+      ]);
+    const previewVoronoi = () =>
+      previewDelaunay().voronoi([
+        minX(),
+        minY(),
+        minX() + width(),
+        minY() + height(),
+      ]);
 
     // VISUAL LOGIC
     // Handles zoom-related functionalities
@@ -1282,11 +1307,18 @@ export function Bluefish(props: BluefishProps) {
     createEffect(() => {
       if (isTraversalType(props.mantisComponentType)) {
         // Finds the node closest to the cursor.
-        const closestPoint = delaunay().find(mouseX(), mouseY());
-        if (isNaN(closestPoint)) return;
-        setCurrentNodeVIndex(closestPoint);
+        const closestPointBubble = bubbleDelaunay().find(mouseX(), mouseY());
+        const closestPointImportant = previewDelaunay().find(
+          mouseX(),
+          mouseY()
+        );
+        if (isNaN(closestPointBubble)) return;
+        setCurrentNodeBubbleIndex(closestPointBubble);
+        setCurrentNodePreviewIndex(
+          isNaN(closestPointImportant) ? -1 : closestPointImportant
+        );
         const closestNode = midpointsToNodes.get(
-          pointToString(midpoints()[closestPoint])
+          pointToString(bubbleMidpoints()[closestPointBubble])
         );
         setCurrentNodeId(resolveNode(closestNode ?? id));
         if (props.mantisTraversalPattern === MantisTraversalPattern.Bubble) {
@@ -1585,12 +1617,12 @@ export function Bluefish(props: BluefishProps) {
           // Otherwise, the lens stays where the mouse leaves it.
           if (props.snap) {
             // Finds the node closest to the lens.
-            const closestPointIndex = delaunay().find(
+            const closestPointIndex = bubbleDelaunay().find(
               props.lensInfo.x,
               props.lensInfo.y
             );
             if (isNaN(closestPointIndex)) return;
-            const closestPoint = midpoints()[closestPointIndex];
+            const closestPoint = bubbleMidpoints()[closestPointIndex];
             setRectX(closestPoint.x);
             setRectY(closestPoint.y);
           } else {
@@ -1708,7 +1740,7 @@ export function Bluefish(props: BluefishProps) {
               <>
                 {/* Voronoi */}
                 <Show when={props.showVoronoi}>
-                  <For each={Array.from(voronoi().cellPolygons())}>
+                  <For each={Array.from(previewVoronoi().cellPolygons())}>
                     {(cell) => (
                       <polygon
                         points={cell.map((point) => point.join(",")).join(" ")}
@@ -1765,14 +1797,16 @@ export function Bluefish(props: BluefishProps) {
                 {/* Indicators that point at neighbors */}
                 <Show when={isPreviewType(props.mantisComponentType)}>
                   <For
-                    each={Array.from(voronoi().neighbors(currentNodeVIndex()))}
+                    each={Array.from(
+                      previewVoronoi().neighbors(currentNodePreviewIndex())
+                    )}
                   >
                     {(neighborIndex) => {
                       // Look up the neighbor's node ID.
                       if (neighborIndex === undefined || neighborIndex < 0)
                         return;
                       const neighborNodeMidpoint = () =>
-                        midpoints()[neighborIndex];
+                        previewMidpoints()[neighborIndex];
                       const neighborNodeId = midpointsToNodes.get(
                         pointToString(neighborNodeMidpoint())
                       );
