@@ -452,10 +452,19 @@ export function Bluefish(props: BluefishProps) {
    * @param viewBox2 - The second viewBox as a string in the format "x y width height".
    * @returns A boolean indicating whether the two viewBoxes overlap.
    */
-  function viewBoxOverlaps(viewBox1: string, viewBox2: string): boolean {
+  function viewBoxOverlaps(
+    viewBox1: string,
+    viewBox2: string,
+    padding: number = 0
+  ): boolean {
     const [x1, y1, w1, h1] = viewBox1.split(" ").map(Number);
     const [x2, y2, w2, h2] = viewBox2.split(" ").map(Number);
-    return !(x1 + w1 < x2 || x2 + w2 < x1 || y1 + h1 < y2 || y2 + h2 < y1);
+    return !(
+      x1 + w1 - padding < x2 ||
+      x2 + w2 - padding < x1 ||
+      y1 + h1 - padding < y2 ||
+      y2 + h2 - padding < y1
+    );
   }
   /**
    * @returns true if `point1` is in the same place as `point2`
@@ -1413,6 +1422,10 @@ export function Bluefish(props: BluefishProps) {
       const directionVectorMagnitude = createMemo(() =>
         Math.sqrt(directionVector().x ** 2 + directionVector().y ** 2)
       );
+      const directionVectorAngle = createMemo(() => {
+        const angle = Math.atan2(directionVector().y, directionVector().x);
+        return angle < 0 ? angle + 2 * Math.PI : angle;
+      });
       const normalizedDirectionVector = createMemo(() => {
         return {
           x: directionVector().x / directionVectorMagnitude(),
@@ -1449,13 +1462,14 @@ export function Bluefish(props: BluefishProps) {
           16
       ); // Depth of the arrowhead notch
       const arrowCenter = createMemo(() => {
+        const distanceToEdge = Math.min(
+          Math.abs(gsapWidth() / 2 / Math.cos(directionVectorAngle())),
+          Math.abs(gsapHeight() / 2 / Math.sin(directionVectorAngle()))
+        );
+        const multiplier = distanceToEdge - arrowPadding();
         return {
-          x:
-            gsapCenterX() +
-            normalizedDirectionVector().x * (gsapWidth() / 2 - arrowPadding()),
-          y:
-            gsapCenterY() +
-            normalizedDirectionVector().y * (gsapHeight() / 2 - arrowPadding()),
+          x: gsapCenterX() + normalizedDirectionVector().x * multiplier,
+          y: gsapCenterY() + normalizedDirectionVector().y * multiplier,
         };
       });
       const notchLeft = createMemo(() => {
@@ -1496,22 +1510,20 @@ export function Bluefish(props: BluefishProps) {
       });
 
       return (
-        <>
-          <polygon
-            id="mantis-ui-arrow"
-            points={`${arrowTip().x},${arrowTip().y} ${notchLeft().x},${notchLeft().y} ${arrowCenter().x},${arrowCenter().y} ${notchRight().x},${notchRight().y}`}
-            fill={mergedProps.arrowheadColor}
-            stroke={"black"}
-            stroke-width={0}
-            style={{
-              filter: `drop-shadow(${0.3 / gsapMagnificationFactor()}rem ${0.3 / gsapMagnificationFactor()}rem ${0.5 / gsapMagnificationFactor()}rem rgba(0, 0, 0, 0.7))`,
-            }}
-            onClick={(e) => {
-              e.stopImmediatePropagation();
-              if (props.onClick) props.onClick();
-            }}
-          />
-        </>
+        <polygon
+          id="mantis-ui-arrow"
+          points={`${arrowTip().x},${arrowTip().y} ${notchLeft().x},${notchLeft().y} ${arrowCenter().x},${arrowCenter().y} ${notchRight().x},${notchRight().y}`}
+          fill={mergedProps.arrowheadColor}
+          stroke={"black"}
+          stroke-width={0}
+          style={{
+            filter: `drop-shadow(${0.3 / gsapMagnificationFactor()}rem ${0.3 / gsapMagnificationFactor()}rem ${0.5 / gsapMagnificationFactor()}rem rgba(0, 0, 0, 0.7))`,
+          }}
+          onClick={(e) => {
+            e.stopImmediatePropagation();
+            if (props.onClick) props.onClick();
+          }}
+        />
       );
     };
     const ViewBoxRect = (props: {
@@ -1795,6 +1807,10 @@ export function Bluefish(props: BluefishProps) {
                             onClick={() => {
                               setMagnificationCenterX(neighborNodeMidpoint().x);
                               setMagnificationCenterY(neighborNodeMidpoint().y);
+                              if (!mouseActive()) {
+                                setMouseX(neighborNodeMidpoint().x);
+                                setMouseY(neighborNodeMidpoint().y);
+                              }
                             }}
                           />
                         </Show>
