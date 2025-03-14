@@ -12,6 +12,10 @@ export enum MantisComponentType {
   MMMiniMap,
   SSLeft,
   SSRight,
+  AMPlanetsTraversal,
+  AMPlanetsAuto,
+  AMPyTutorTraversal,
+  AMPyTutorAuto,
   LMain,
   LLens,
   Basic,
@@ -34,6 +38,26 @@ export function isSplitScreenType(type: MantisComponentType | undefined) {
   );
 }
 /**
+ * @returns true if the component of type `type` is a part of the Auto Map
+ * functionality and an automatically controlled (so non-traversal) screen.
+ */
+export function isAMAutoType(type: MantisComponentType | undefined) {
+  return (
+    type === MantisComponentType.AMPlanetsAuto ||
+    type === MantisComponentType.AMPyTutorAuto
+  );
+}
+/**
+ * @returns true if the component of type `type` is a part of the Auto Map
+ * functionality and a traversal screen.
+ */
+export function isAMTraversalType(type: MantisComponentType | undefined) {
+  return (
+    type === MantisComponentType.AMPlanetsTraversal ||
+    type === MantisComponentType.AMPyTutorTraversal
+  );
+}
+/**
  * @returns true if the component of type `type` is a part of the Preview
  * functionality.
  */
@@ -53,6 +77,7 @@ export function isTraversalType(type: MantisComponentType | undefined) {
   return (
     type === MantisComponentType.MMMain ||
     type === MantisComponentType.Basic ||
+    isAMTraversalType(type) ||
     isSplitScreenType(type) ||
     isPreviewType(type)
   );
@@ -71,6 +96,9 @@ export function isSplitScreenContext(context: MantisState | undefined) {
 }
 export function isMultiLensContext(context: MantisState | undefined) {
   return context?.type === "L";
+}
+export function isAutoMapContext(context: MantisState | undefined) {
+  return context?.type === "AM";
 }
 
 export type LLensInfo = { x: number; y: number; magnification: number };
@@ -95,12 +123,21 @@ export type MantisState =
       updateLensInfo: Setter<LLensInfo[]>;
     }
   | { type: "P" }
-  | { type: "B" };
+  | { type: "B" }
+  | {
+      type: "AM";
+      selNodeCenter: Accessor<{ x: number; y: number }>;
+      setSelNodeCenter: Setter<{ x: number; y: number }>;
+      zoomLevel: Accessor<number>;
+      setZoomLevel: Setter<number>;
+      mainViewBox: Accessor<string>;
+      setMainViewBox: Setter<string>;
+    };
 
 const MantisContext = createContext<MantisState>();
 
 export const MantisProvider = (
-  props: ParentProps & { providerType: "MM" | "SS" | "L" | "P" | "B" }
+  props: ParentProps & { providerType: "MM" | "SS" | "L" | "P" | "B" | "AM" }
 ) => {
   let providerState: MantisState | undefined;
 
@@ -140,6 +177,20 @@ export const MantisProvider = (
   } else if (props.providerType === "B") {
     // BASIC
     providerState = { type: "B" };
+  } else if (props.providerType === "AM") {
+    // AUTO-MAP
+    const [selNodeCenter, setSelNodeCenter] = createSignal({ x: 0, y: 0 });
+    const [zoomLevel, setZoomLevel] = createSignal(1);
+    const [mainViewBox, setMainViewBox] = createSignal(`0 0 0 0`);
+    providerState = {
+      type: "AM",
+      selNodeCenter,
+      setSelNodeCenter,
+      zoomLevel,
+      setZoomLevel,
+      mainViewBox,
+      setMainViewBox,
+    };
   }
 
   return (

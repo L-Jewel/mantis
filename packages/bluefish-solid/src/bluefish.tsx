@@ -39,6 +39,9 @@ import gsap from "gsap";
 import * as d3 from "d3";
 import {
   BiMap,
+  isAMAutoType,
+  isAMTraversalType,
+  isAutoMapContext,
   isDraggableType,
   isMiniMapContext,
   isMultiLensContext,
@@ -95,13 +98,14 @@ type ViewBox = {
 };
 
 /**
- * Preview/Enemy Indicator Prototype Only.
+ * Preview/Enemy Indicator + Auto Map Prototype Only.
  * @returns A map that maps a node to a list of nodes related to it.
  */
 const getNodeRelations = (
   type: MantisComponentType | undefined
 ): Map<string, string[]> => {
   switch (type) {
+    case MantisComponentType.AMPlanetsTraversal:
     case MantisComponentType.PreviewPlanets: {
       return new Map<string, string[]>([
         ["planets-stackh", ["mercury", "venus", "earth", "mars"]],
@@ -110,6 +114,7 @@ const getNodeRelations = (
         ["arrow", ["label", "mercury"]],
       ]);
     }
+    case MantisComponentType.AMPyTutorTraversal:
     case MantisComponentType.PreviewPythonTutor: {
       return new Map<string, string[]>([
         ["stackSlot-0", ["address-0", "stack-heap-arrow-0"]],
@@ -158,13 +163,14 @@ const getNodeRelations = (
   }
 };
 /**
- * Preview/Enemy Indicator Prototype Only.
+ * Preview/Enemy Indicator + Auto Map Prototype Only.
  * @returns a list of the salient nodes in the given diagram
  */
 const getPreviewNodes = (
   type: MantisComponentType | undefined
 ): Set<string> => {
   switch (type) {
+    case MantisComponentType.AMPlanetsTraversal:
     case MantisComponentType.PreviewPlanets: {
       return new Set([
         "planets-stackh",
@@ -176,6 +182,7 @@ const getPreviewNodes = (
         "arrow",
       ]);
     }
+    case MantisComponentType.AMPyTutorTraversal:
     case MantisComponentType.PreviewPythonTutor: {
       return new Set([
         "stack-heap-arrow-0",
@@ -190,6 +197,43 @@ const getPreviewNodes = (
         "heap-arrow-0-5",
         "heap-arrow-2-4",
         "heap-arrow-3-1",
+        "stackSlot-0",
+        "stackSlot-1",
+        "stackSlot-2",
+      ]);
+    }
+    default: {
+      return new Set([]);
+    }
+  }
+};
+/**
+ * Preview/Enemy Indicator + Auto Map Prototype Only.
+ * @returns a list of the salient nodes (excluding arrows/connectors) in the given diagram
+ */
+const getIndicatorNodes = (
+  type: MantisComponentType | undefined
+): Set<string> => {
+  switch (type) {
+    case MantisComponentType.AMPlanetsTraversal:
+    case MantisComponentType.PreviewPlanets: {
+      return new Set([
+        "planets-stackh",
+        "mercury",
+        "venus",
+        "earth",
+        "mars",
+        "label",
+      ]);
+    }
+    case MantisComponentType.AMPyTutorTraversal:
+    case MantisComponentType.PreviewPythonTutor: {
+      return new Set([
+        "address-0",
+        "address-1",
+        "address-2",
+        "address-3",
+        "address-4",
         "stackSlot-0",
         "stackSlot-1",
         "stackSlot-2",
@@ -270,13 +314,15 @@ export function Bluefish(props: BluefishProps) {
   const mantisContext = useMantisProvider();
   const [bubbleMidpoints, setBubbleMidpoints] = createSignal<Point[]>([]);
   const [previewMidpoints, setPreviewMidpoints] = createSignal<Point[]>([]);
-  const midpointsToNodes = new Map<string, string>();
+  const midpointsToNodes = new BiMap<string, string>();
   /**
    * scopeName <=> nodeId
    */
   const scopeMap = new BiMap<string, string>();
   const nodeRelations = () => getNodeRelations(props.mantisComponentType);
   const previewNodes = () => getPreviewNodes(props.mantisComponentType);
+  const indicatorNodes = () =>
+    new Set(getIndicatorNodes(props.mantisComponentType));
   // Helper functions
   /**
    * @param nodeId a string that corresponds to the ID of a node in the scenegraph
@@ -418,6 +464,11 @@ export function Bluefish(props: BluefishProps) {
   function pointToString(point: Point): string {
     return `${point.x},${point.y}`;
   }
+  function stringToPoint(pointString: string): Point | undefined {
+    const [x, y] = pointString.split(",").map(Number);
+    if (isNaN(x) || isNaN(y)) return undefined;
+    return { x: x ?? 0, y: y ?? 0 };
+  }
   /**
    * @param nodeId a string that corresponds to the ID of a node in the scenegraph
    * @returns the node's bbox
@@ -447,6 +498,19 @@ export function Bluefish(props: BluefishProps) {
     };
   }
   /**
+   * Calculates the center point of a given view box.
+   *
+   * @param viewBox - The view box as a string in the format "x y width height".
+   * @returns The center point of the view box.
+   */
+  function getViewBoxCenter(viewBox: string): Point {
+    const [x, y, width, height] = viewBox.split(" ").map(Number);
+    return {
+      x: x + width / 2,
+      y: y + height / 2,
+    };
+  }
+  /**
    * Determines if two SVG view boxes overlap.
    *
    * @param viewBox1 - The first viewBox as a string in the format "x y width height".
@@ -465,6 +529,22 @@ export function Bluefish(props: BluefishProps) {
       x2 + w2 - padding < x1 ||
       y1 + h1 - padding < y2 ||
       y2 + h2 - padding < y1
+    );
+  }
+  /**
+   * Determines if a point is within a given view box.
+   *
+   * @param point - The point to check.
+   * @param viewBox - The view box as a string in the format "x y width height".
+   * @returns A boolean indicating whether the point is within the view box.
+   */
+  function isPointInViewBox(point: Point, viewBox: string): boolean {
+    const [x, y, width, height] = viewBox.split(" ").map(Number);
+    return (
+      point.x >= x &&
+      point.x <= x + width &&
+      point.y >= y &&
+      point.y <= y + height
     );
   }
   /**
@@ -518,8 +598,12 @@ export function Bluefish(props: BluefishProps) {
   function getCursorColor(): string {
     switch (props.mantisComponentType) {
       case MantisComponentType.SSLeft:
+      case MantisComponentType.AMPlanetsTraversal:
+      case MantisComponentType.AMPyTutorTraversal:
         return "orange";
       case MantisComponentType.SSRight:
+      case MantisComponentType.AMPlanetsAuto:
+      case MantisComponentType.AMPyTutorAuto:
         return "blue";
       default:
         return "red";
@@ -528,7 +612,10 @@ export function Bluefish(props: BluefishProps) {
 
   // Calculate the midpoint of each node (Traversal Components Only)
   createEffect(() => {
-    if (isPreviewType(props.mantisComponentType)) {
+    if (
+      isPreviewType(props.mantisComponentType) ||
+      isAMTraversalType(props.mantisComponentType)
+    ) {
       const newBubbleMidpoints: Point[] = [];
       const newPreviewMidpoints: Point[] = [];
       /**
@@ -664,7 +751,7 @@ export function Bluefish(props: BluefishProps) {
     const SCROLL_DELTA = props.parameterOverrides?.scrollDelta ?? 0.2;
     const CURSOR_EPSILON = props.parameterOverrides?.cursorEpsilon ?? 3;
     const TRADITIONAL_EPSILON =
-      (props.parameterOverrides?.traditionalEpsilon ?? 1) * 100;
+      (props.parameterOverrides?.traditionalEpsilon ?? 0.8) * 100;
     const MAGNIFICATION_DEFAULT = 2;
 
     // SVG View Box Information
@@ -802,6 +889,15 @@ export function Bluefish(props: BluefishProps) {
     const selNodeHeight = () => currentBboxInfo()?.height ?? 0;
     const selNodeCenterX = () => selNodeX() + selNodeWidth() / 2;
     const selNodeCenterY = () => selNodeY() + selNodeHeight() / 2;
+
+    const currentPreviewNodeId = () =>
+      resolveNode(
+        midpointsToNodes.getValue(
+          pointToString(previewMidpoints()[currentNodePreviewIndex()])
+        ) ?? currentNodeId()
+      );
+    const relatedNodes = () =>
+      nodeRelations().get(scopeMap.getKey(currentPreviewNodeId()) ?? "") ?? [];
 
     // Red Box Information
     // Honestly just a misc signal used for different things in each component.
@@ -1163,12 +1259,23 @@ export function Bluefish(props: BluefishProps) {
      * main SVG.
      */
     function handleKeyPress(event: KeyboardEvent) {
-      if (
-        isTraversalType(props.mantisComponentType) &&
-        elementActive() &&
-        event.key === "f"
-      ) {
-        setMouseActive(!mouseActive());
+      if (isTraversalType(props.mantisComponentType) && elementActive()) {
+        if (event.key === "f") setMouseActive(!mouseActive());
+        else if (event.shiftKey && event.key === "ArrowUp") {
+          setMagnificationFactor((prev) => Math.floor(prev) + 1);
+        } else if (event.shiftKey && event.key === "ArrowDown") {
+          setMagnificationFactor((prev) => Math.max(1, Math.ceil(prev) - 1));
+        }
+        // Allows for users to cycle through the auto-focus of the Auto Map.
+        if (isAMTraversalType(props.mantisComponentType)) {
+          if (event.key === "d") {
+            setAutoMapIndex((prev) => (prev + 1) % autoMapContent().length);
+          } else if (event.key === "a") {
+            setAutoMapIndex((prev) =>
+              prev === 0 ? autoMapContent().length - 1 : prev - 1
+            );
+          }
+        }
       } else if (
         elementActive() &&
         props.mantisComponentType === MantisComponentType.LLens &&
@@ -1307,17 +1414,30 @@ export function Bluefish(props: BluefishProps) {
     createEffect(() => {
       if (isTraversalType(props.mantisComponentType)) {
         // Finds the node closest to the cursor.
-        const closestPointBubble = bubbleDelaunay().find(mouseX(), mouseY());
-        const closestPointImportant = previewDelaunay().find(
-          mouseX(),
-          mouseY()
-        );
+        const closestPointBubble =
+          props.mantisTraversalPattern === MantisTraversalPattern.Joystick
+            ? bubbleDelaunay().find(
+                magnificationCenterX(),
+                magnificationCenterY()
+              )
+            : bubbleDelaunay().find(mouseX(), mouseY());
+        const closestPointImportant =
+          props.mantisTraversalPattern === MantisTraversalPattern.Joystick
+            ? previewDelaunay().find(
+                magnificationCenterX(),
+                magnificationCenterY()
+              )
+            : previewDelaunay().find(mouseX(), mouseY());
         if (isNaN(closestPointBubble)) return;
         setCurrentNodeBubbleIndex(closestPointBubble);
-        setCurrentNodePreviewIndex(
-          isNaN(closestPointImportant) ? -1 : closestPointImportant
-        );
-        const closestNode = midpointsToNodes.get(
+        setCurrentNodePreviewIndex((prevVal) => {
+          const newVal = isNaN(closestPointImportant)
+            ? -1
+            : closestPointImportant;
+          if (newVal !== prevVal) setAutoMapIndex(0);
+          return newVal;
+        });
+        const closestNode = midpointsToNodes.getValue(
           pointToString(bubbleMidpoints()[closestPointBubble])
         );
         setCurrentNodeId(resolveNode(closestNode ?? id));
@@ -1353,7 +1473,7 @@ export function Bluefish(props: BluefishProps) {
             max: number,
             length: number
           ) => {
-            const edgeThreshold = length / 6; // Distance from the edge of the screen to start scrolling
+            const edgeThreshold = length / 7; // Distance from the edge of the screen to start scrolling
 
             if (mouse < min + edgeThreshold) {
               return Math.max(min, current - TRADITIONAL_EPSILON);
@@ -1432,6 +1552,44 @@ export function Bluefish(props: BluefishProps) {
         const [vbbX, vbbY, vbbW, vbbH] = mantisContext.viewBBox().split(" ");
         setMagnificationCenterX(parseFloat(vbbX) + parseFloat(vbbW) / 2);
         setMagnificationCenterY(parseFloat(vbbY) + parseFloat(vbbH) / 2);
+      }
+    });
+
+    // AUTO-MAP LOGIC
+    // Node IDs of the related nodes to the current node.
+    const autoMapContent = () => {
+      const relatedNodeIds = relatedNodes()
+        .filter((node) => indicatorNodes().has(node))
+        .map((node) => scopeMap.getValue(node))
+        .filter((nodeId) => nodeId !== undefined);
+      return [...relatedNodeIds, currentPreviewNodeId()];
+    };
+    const [autoMapIndex, setAutoMapIndex] = createSignal(0);
+    createEffect(() => {
+      if (isAutoMapContext(mantisContext)) {
+        if (isAMTraversalType(props.mantisComponentType)) {
+          mantisContext.setMainViewBox(magnificationViewBox());
+          mantisContext.setZoomLevel(Math.max(1, magnificationFactor() - 1));
+          const autoMapCenter = stringToPoint(
+            midpointsToNodes.getKey(autoMapContent()[autoMapIndex() ?? 0]) ?? ""
+          );
+          if (!autoMapCenter) return;
+          mantisContext.setSelNodeCenter({
+            x: autoMapCenter.x,
+            y: autoMapCenter.y,
+          });
+        } else if (isAMAutoType(props.mantisComponentType) && svgRef) {
+          // Update the automatic screen to center around the selected node
+          // and zoom to the specified zoom level.
+          setMagnificationFactor(mantisContext.zoomLevel());
+          setMagnificationCenterX(mantisContext.selNodeCenter().x);
+          setMagnificationCenterY(mantisContext.selNodeCenter().y);
+          gsap.to(svgRef, {
+            attr: { viewBox: magnificationViewBox() },
+            duration: GSAP_DURATION,
+            onUpdate: updateGSAPCenter,
+          });
+        }
       }
     });
 
@@ -1807,7 +1965,7 @@ export function Bluefish(props: BluefishProps) {
                         return;
                       const neighborNodeMidpoint = () =>
                         previewMidpoints()[neighborIndex];
-                      const neighborNodeId = midpointsToNodes.get(
+                      const neighborNodeId = midpointsToNodes.getValue(
                         pointToString(neighborNodeMidpoint())
                       );
                       if (!neighborNodeId) return;
@@ -1822,10 +1980,7 @@ export function Bluefish(props: BluefishProps) {
                           `${neighborXY.x} ${neighborXY.y} ${neighborBbox.width} ${neighborBbox.height}`
                         );
                       // Determine the color of the arrow (orange if related, purple if not)
-                      const relatedNodes = () =>
-                        nodeRelations().get(
-                          scopeMap.getKey(currentNodeId()) ?? ""
-                        ) ?? [];
+
                       const arrowColor = () =>
                         relatedNodes().includes(
                           scopeMap.getKey(neighborNodeId) ?? ""
@@ -1882,6 +2037,32 @@ export function Bluefish(props: BluefishProps) {
                       stroke="orange"
                       strokeWidth={2}
                     />
+                  ))}
+            {/* Auto-Map Indicators */}
+            {isAutoMapContext(mantisContext) &&
+              (isAMTraversalType(props.mantisComponentType)
+                ? !isPointInViewBox(
+                    mantisContext.selNodeCenter(),
+                    magnificationViewBox()
+                  ) &&
+                  isZoomed() && (
+                    <OffScreenArrow
+                      targetPoint={mantisContext.selNodeCenter()}
+                      arrowheadColor="blue"
+                    />
+                  )
+                : !isPointInViewBox(
+                    getViewBoxCenter(mantisContext.mainViewBox()),
+                    magnificationViewBox()
+                  ) && (
+                    <>
+                      <OffScreenArrow
+                        targetPoint={getViewBoxCenter(
+                          mantisContext.mainViewBox()
+                        )}
+                        arrowheadColor="orange"
+                      />
+                    </>
                   ))}
             {/* Cursor Position */}
             <circle cx={mouseX()} cy={mouseY()} r={3} fill={getCursorColor()} />
