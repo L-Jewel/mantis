@@ -9,21 +9,28 @@ import {
 export const Preview = (
   props: ParentProps & {
     traversalPattern?: MantisTraversalPattern;
-    diagram: "Planets" | "Python-Tutor";
+    diagram: "Planets" | "Python-Tutor" | "Pulley";
     showVoronoi?: boolean;
     showHighlighting?: boolean;
     parameterOverrides?: MantisOverrides;
   }
 ) => {
+  const previewComponentType = () => {
+    switch (props.diagram) {
+      case "Planets":
+        return MantisComponentType.PreviewPlanets;
+      case "Python-Tutor":
+        return MantisComponentType.PreviewPythonTutor;
+      case "Pulley":
+        return MantisComponentType.PreviewPulley;
+    }
+  };
+
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
       <MantisProvider providerType="P">
         <Bluefish
-          mantisComponentType={
-            props.diagram === "Planets"
-              ? MantisComponentType.PreviewPlanets
-              : MantisComponentType.PreviewPythonTutor
-          }
+          mantisComponentType={previewComponentType()}
           mantisTraversalPattern={props.traversalPattern}
           {...props}
         >

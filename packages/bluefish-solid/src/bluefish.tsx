@@ -152,6 +152,23 @@ const getNodeRelations = (
         ["heap-arrow-3-1", ["address-3", "address-4"]],
       ]);
     }
+    case MantisComponentType.PreviewPulley: {
+      return new Map<string, string[]>([
+        ["l0", ["rect", "B"]],
+        ["l1", ["A", "B", "t1"]],
+        ["l2", ["B", "C", "t2"]],
+        ["l3", ["rect", "C", "t3"]],
+        ["l4", ["A", "w1-weight", "t4"]],
+        ["l5", ["A", "w2-weight", "t5"]],
+        ["l6", ["C", "w2-weight", "t6"]],
+        ["t1", ["l1"]],
+        ["t2", ["l2"]],
+        ["t3", ["l3"]],
+        ["t4", ["l4"]],
+        ["t5", ["l5"]],
+        ["t6", ["l6"]],
+      ]);
+    }
     default: {
       return new Map<string, string[]>([]);
     }
@@ -197,6 +214,29 @@ const getPreviewNodes = (
         "stackSlot-2",
       ]);
     }
+    case MantisComponentType.PreviewPulley: {
+      return new Set([
+        "l0",
+        "l1",
+        "l2",
+        "l3",
+        "l4",
+        "l5",
+        "l6",
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+        "t6",
+        "w1-weight",
+        "w2-weight",
+        "A",
+        "B",
+        "C",
+        "rect",
+      ]);
+    }
     default: {
       return new Set([]);
     }
@@ -232,6 +272,21 @@ const getIndicatorNodes = (
         "stackSlot-0",
         "stackSlot-1",
         "stackSlot-2",
+      ]);
+    }
+    case MantisComponentType.PreviewPulley: {
+      return new Set([
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+        "t6",
+        "w1-weight",
+        "w2-weight",
+        "A",
+        "B",
+        "C",
       ]);
     }
     default: {
@@ -309,7 +364,8 @@ export function Bluefish(props: BluefishProps) {
   const mantisContext = useMantisProvider();
   const [bubbleMidpoints, setBubbleMidpoints] = createSignal<Point[]>([]);
   const [previewMidpoints, setPreviewMidpoints] = createSignal<Point[]>([]);
-  const midpointsToNodes = new BiMap<string, string>();
+  const bubbleMidpointsToNodes = new BiMap<string, string>();
+  const previewMidpointsToNodes = new BiMap<string, string>();
   /**
    * scopeName <=> nodeId
    */
@@ -456,6 +512,34 @@ export function Bluefish(props: BluefishProps) {
       return computeBoundingBoxArrow(node.refId);
     }
   }
+  /**
+   * @param nodeId a string that corresponds to the ID of a line node in the scenegraph
+   * @returns the line's bounding box with nonzero width and height
+   */
+  function computeBoundingBoxLine(nodeId: string): {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } {
+    const node = scenegraphSignal().scenegraph[nodeId];
+    if (node && node.type === "node") {
+      const nodeCustomData = node.customData;
+      const left = Math.min(nodeCustomData.fromX, nodeCustomData.toX);
+      const top = Math.min(nodeCustomData.fromY, nodeCustomData.toY);
+      const width = Math.max(
+        Math.abs(nodeCustomData.fromX - nodeCustomData.toX),
+        1
+      );
+      const height = Math.max(
+        Math.abs(nodeCustomData.fromY - nodeCustomData.toY),
+        1
+      );
+      return { left, top, width, height };
+    } else {
+      return computeBoundingBoxLine(node.refId);
+    }
+  }
   function pointToString(point: Point): string {
     return `${point.x},${point.y}`;
   }
@@ -475,6 +559,8 @@ export function Bluefish(props: BluefishProps) {
       return computeBoundingBoxUnion((node as BluefishNodeType).children);
     } else if (nodeType === "Arrow") {
       return computeBoundingBoxArrow(nodeId);
+    } else if (nodeType === "Line") {
+      return computeBoundingBoxLine(nodeId);
     }
     if (node && node.type === "node") {
       return node.bbox;
@@ -622,7 +708,8 @@ export function Bluefish(props: BluefishProps) {
        */
       const findKeyInScope = (searchString: string): string | undefined => {
         for (const key in scope) {
-          if (key.includes(searchString)) {
+          const regex = new RegExp(`^${searchString}(\\(cl-\\d+\\))?$`);
+          if (regex.test(key)) {
             return key;
           }
         }
@@ -645,8 +732,11 @@ export function Bluefish(props: BluefishProps) {
           y: nodeTransform.y + (nodeBbox.top ?? 0) + (nodeBbox.height ?? 0) / 2,
         };
         newBubbleMidpoints.push(nodeMidpoint);
-        midpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
-        if (previewNodeIds.has(nodeId)) newPreviewMidpoints.push(nodeMidpoint);
+        bubbleMidpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
+        if (previewNodeIds.has(nodeId)) {
+          newPreviewMidpoints.push(nodeMidpoint);
+          previewMidpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
+        }
       }
 
       setBubbleMidpoints(newBubbleMidpoints);
@@ -666,7 +756,7 @@ export function Bluefish(props: BluefishProps) {
           y: nodeTransform.y + (nodeBbox.top ?? 0) + (nodeBbox.height ?? 0) / 2,
         };
         newMidpoints.push(nodeMidpoint);
-        midpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
+        bubbleMidpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
       }
 
       setBubbleMidpoints(newMidpoints);
@@ -678,12 +768,21 @@ export function Bluefish(props: BluefishProps) {
   const [currentNodePreviewIndex, setCurrentNodePreviewIndex] =
     createSignal(-1);
   const [currentNodeId, setCurrentNodeId] = createSignal<string>(id);
+  const [previewNodeId, setPreviewNodeId] = createSignal<string>(id);
   const currentNode = () =>
     scenegraphSignal().scenegraph[currentNodeId()] as BluefishNodeType;
+  const previewNode = () =>
+    scenegraphSignal().scenegraph[previewNodeId()] as BluefishNodeType;
   const currentTransform = () => calculateTransform(currentNodeId());
+  const previewTransform = () => calculateTransform(previewNodeId());
   const currentBboxInfo = () => {
     return currentNodeId()
       ? getBbox(currentNodeId())
+      : { left: 0, top: 0, width: 0, height: 0 };
+  };
+  const previewBboxInfo = () => {
+    return previewNodeId()
+      ? getBbox(previewNodeId())
       : { left: 0, top: 0, width: 0, height: 0 };
   };
 
@@ -884,15 +983,18 @@ export function Bluefish(props: BluefishProps) {
     const selNodeHeight = () => currentBboxInfo()?.height ?? 0;
     const selNodeCenterX = () => selNodeX() + selNodeWidth() / 2;
     const selNodeCenterY = () => selNodeY() + selNodeHeight() / 2;
+    // Preview Node BBox Information
+    const prevNodeX = () =>
+      (previewBboxInfo()?.left ?? 0) + (previewTransform()?.x ?? 0);
+    const prevNodeY = () =>
+      (previewBboxInfo()?.top ?? 0) + (previewTransform()?.y ?? 0);
+    const prevNodeWidth = () => previewBboxInfo()?.width ?? 0;
+    const prevNodeHeight = () => previewBboxInfo()?.height ?? 0;
+    const prevNodeCenterX = () => prevNodeX() + prevNodeWidth() / 2;
+    const prevNodeCenterY = () => prevNodeY() + prevNodeHeight() / 2;
 
-    const currentPreviewNodeId = () =>
-      resolveNode(
-        midpointsToNodes.getValue(
-          pointToString(previewMidpoints()[currentNodePreviewIndex()])
-        ) ?? currentNodeId()
-      );
     const relatedNodes = () =>
-      nodeRelations().get(scopeMap.getKey(currentPreviewNodeId()) ?? "") ?? [];
+      nodeRelations().get(scopeMap.getKey(previewNodeId()) ?? "") ?? [];
 
     // Red Box Information
     // Honestly just a misc signal used for different things in each component.
@@ -1301,6 +1403,7 @@ export function Bluefish(props: BluefishProps) {
               mantisContext.setIsAutoZoomed(true);
               break;
             case "e":
+              // TODO - Fix bug where it doesn't jump when the mouse is frozen
               setMagnificationCenterX(mantisContext.selNodeCenter().x);
               setMagnificationCenterY(mantisContext.selNodeCenter().y);
               if (!mouseActive()) {
@@ -1447,20 +1550,11 @@ export function Bluefish(props: BluefishProps) {
     createEffect(() => {
       if (isTraversalType(props.mantisComponentType)) {
         // Finds the node closest to the cursor.
-        const closestPointBubble =
-          props.mantisTraversalPattern === MantisTraversalPattern.Joystick
-            ? bubbleDelaunay().find(
-                magnificationCenterX(),
-                magnificationCenterY()
-              )
-            : bubbleDelaunay().find(mouseX(), mouseY());
-        const closestPointImportant =
-          props.mantisTraversalPattern === MantisTraversalPattern.Joystick
-            ? previewDelaunay().find(
-                magnificationCenterX(),
-                magnificationCenterY()
-              )
-            : previewDelaunay().find(mouseX(), mouseY());
+        const closestPointBubble = bubbleDelaunay().find(mouseX(), mouseY());
+        const closestPointImportant = previewDelaunay().find(
+          mouseX(),
+          mouseY()
+        );
         if (isNaN(closestPointBubble)) return;
         setCurrentNodeBubbleIndex(closestPointBubble);
         setCurrentNodePreviewIndex((prevVal) => {
@@ -1470,10 +1564,16 @@ export function Bluefish(props: BluefishProps) {
           if (newVal !== prevVal) setAutoMapIndex(0);
           return newVal;
         });
-        const closestNode = midpointsToNodes.getValue(
+
+        const closestNode = bubbleMidpointsToNodes.getValue(
           pointToString(bubbleMidpoints()[closestPointBubble])
         );
         setCurrentNodeId(resolveNode(closestNode ?? id));
+        const closestPreviewNode = previewMidpointsToNodes.getValue(
+          pointToString(previewMidpoints()[closestPointImportant])
+        );
+        setPreviewNodeId(resolveNode(closestPreviewNode ?? id));
+
         if (props.mantisTraversalPattern === MantisTraversalPattern.Bubble) {
           // Update the user's view to center around the selected node.
           setMagnificationCenterX(selNodeCenterX());
@@ -1595,7 +1695,7 @@ export function Bluefish(props: BluefishProps) {
         .filter((node) => indicatorNodes().has(node))
         .map((node) => scopeMap.getValue(node))
         .filter((nodeId) => nodeId !== undefined);
-      return [...relatedNodeIds, currentPreviewNodeId()];
+      return [...relatedNodeIds, previewNodeId()];
     };
     const [autoMapIndex, setAutoMapIndex] = createSignal(0);
     createEffect(() => {
@@ -1604,7 +1704,9 @@ export function Bluefish(props: BluefishProps) {
           mantisContext.setMainViewBox(magnificationViewBox());
           mantisContext.setZoomLevel(Math.max(1, magnificationFactor() - 1));
           const autoMapCenter = stringToPoint(
-            midpointsToNodes.getKey(autoMapContent()[autoMapIndex() ?? 0]) ?? ""
+            bubbleMidpointsToNodes.getKey(
+              autoMapContent()[autoMapIndex() ?? 0]
+            ) ?? ""
           );
           if (!autoMapCenter) return;
           mantisContext.setSelNodeCenter({
@@ -1977,20 +2079,36 @@ export function Bluefish(props: BluefishProps) {
                 {/* Dynamic Highlighting */}
                 <Show when={showHighlighting()}>
                   {/* Highlight Selected Node */}
-                  <rect
-                    stroke="green"
-                    fill="none"
-                    stroke-width={2}
-                    x={selNodeX()}
-                    y={selNodeY()}
-                    width={selNodeWidth()}
-                    height={selNodeHeight()}
-                  />
+                  {isPreviewType(props.mantisComponentType) ? (
+                    <rect
+                      stroke="green"
+                      fill="none"
+                      stroke-width={2}
+                      x={prevNodeX()}
+                      y={prevNodeY()}
+                      width={prevNodeWidth()}
+                      height={prevNodeHeight()}
+                    />
+                  ) : (
+                    <rect
+                      stroke="green"
+                      fill="none"
+                      stroke-width={2}
+                      x={selNodeX()}
+                      y={selNodeY()}
+                      width={selNodeWidth()}
+                      height={selNodeHeight()}
+                    />
+                  )}
                   {/* Highlight Related Nodes (HARDCODED IN `nodeRelations`) */}
                   <For
                     each={
                       nodeRelations().get(
-                        scopeMap.getKey(currentNodeId()) ?? ""
+                        scopeMap.getKey(
+                          isPreviewType(props.mantisComponentType)
+                            ? previewNodeId()
+                            : currentNodeId()
+                        ) ?? ""
                       ) ?? []
                     }
                   >
@@ -2030,7 +2148,7 @@ export function Bluefish(props: BluefishProps) {
                         return;
                       const neighborNodeMidpoint = () =>
                         previewMidpoints()[neighborIndex];
-                      const neighborNodeId = midpointsToNodes.getValue(
+                      const neighborNodeId = bubbleMidpointsToNodes.getValue(
                         pointToString(neighborNodeMidpoint())
                       );
                       if (!neighborNodeId) return;

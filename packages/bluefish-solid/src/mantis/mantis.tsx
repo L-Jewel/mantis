@@ -21,6 +21,7 @@ export enum MantisComponentType {
   Basic,
   PreviewPlanets,
   PreviewPythonTutor,
+  PreviewPulley,
 }
 export enum MantisTraversalPattern {
   Bubble,
@@ -64,7 +65,8 @@ export function isAMTraversalType(type: MantisComponentType | undefined) {
 export function isPreviewType(type: MantisComponentType | undefined) {
   return (
     type === MantisComponentType.PreviewPlanets ||
-    type === MantisComponentType.PreviewPythonTutor
+    type === MantisComponentType.PreviewPythonTutor ||
+    type === MantisComponentType.PreviewPulley
   );
 }
 /**
