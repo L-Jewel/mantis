@@ -132,6 +132,10 @@ export type MantisState =
       setZoomLevel: Setter<number>;
       mainViewBox: Accessor<string>;
       setMainViewBox: Setter<string>;
+      isAutoZoomed: Accessor<boolean>;
+      setIsAutoZoomed: Setter<boolean>;
+      allViewBoxes: Accessor<string[]>;
+      setAllViewBoxes: Setter<string[]>;
     };
 
 const MantisContext = createContext<MantisState>();
@@ -182,6 +186,8 @@ export const MantisProvider = (
     const [selNodeCenter, setSelNodeCenter] = createSignal({ x: 0, y: 0 });
     const [zoomLevel, setZoomLevel] = createSignal(1);
     const [mainViewBox, setMainViewBox] = createSignal(`0 0 0 0`);
+    const [isAutoZoomed, setIsAutoZoomed] = createSignal(true);
+    const [allViewBoxes, setAllViewBoxes] = createSignal<string[]>([]);
     providerState = {
       type: "AM",
       selNodeCenter,
@@ -190,6 +196,10 @@ export const MantisProvider = (
       setZoomLevel,
       mainViewBox,
       setMainViewBox,
+      isAutoZoomed,
+      setIsAutoZoomed,
+      allViewBoxes,
+      setAllViewBoxes,
     };
   }
 

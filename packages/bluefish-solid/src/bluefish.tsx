@@ -27,6 +27,7 @@ import {
   createUniqueId,
   mergeProps,
   onCleanup,
+  onMount,
   untrack,
 } from "solid-js";
 import { ParentScopeIdContext, Scope, ScopeContext } from "./createName";
@@ -89,12 +90,6 @@ type BluefishNodeType = {
 type Point = {
   x: number;
   y: number;
-};
-type ViewBox = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
 };
 
 /**
@@ -600,7 +595,7 @@ export function Bluefish(props: BluefishProps) {
       case MantisComponentType.SSLeft:
       case MantisComponentType.AMPlanetsTraversal:
       case MantisComponentType.AMPyTutorTraversal:
-        return "orange";
+        return "orangered";
       case MantisComponentType.SSRight:
       case MantisComponentType.AMPlanetsAuto:
       case MantisComponentType.AMPyTutorAuto:
@@ -981,6 +976,25 @@ export function Bluefish(props: BluefishProps) {
         minY() + height(),
       ]);
 
+    // TODO: Potential styling to help with split screen?
+    // onMount(() => {
+    //   if (
+    //     isAMTraversalType(props.mantisComponentType) ||
+    //     props.mantisComponentType === MantisComponentType.SSLeft
+    //   ) {
+    //     if (svgRef) {
+    //       svgRef.style.border = ".2rem solid orangered";
+    //     }
+    //   } else if (
+    //     isAMAutoType(props.mantisComponentType) ||
+    //     props.mantisComponentType === MantisComponentType.SSRight
+    //   ) {
+    //     if (svgRef) {
+    //       svgRef.style.border = ".2rem solid blue";
+    //     }
+    //   }
+    // });
+
     // VISUAL LOGIC
     // Handles zoom-related functionalities
     const [isZoomed, setIsZoomed] = createSignal(false);
@@ -1196,7 +1210,7 @@ export function Bluefish(props: BluefishProps) {
       }
     }
 
-    // GSAP Logic (Mini-Map Main + Split Screen Components)
+    // GSAP Logic (Mini-Map Main + Traversal Components)
     createEffect(() => {
       if (svgRef) {
         if (
@@ -1267,13 +1281,32 @@ export function Bluefish(props: BluefishProps) {
           setMagnificationFactor((prev) => Math.max(1, Math.ceil(prev) - 1));
         }
         // Allows for users to cycle through the auto-focus of the Auto Map.
-        if (isAMTraversalType(props.mantisComponentType)) {
-          if (event.key === "d") {
-            setAutoMapIndex((prev) => (prev + 1) % autoMapContent().length);
-          } else if (event.key === "a") {
-            setAutoMapIndex((prev) =>
-              prev === 0 ? autoMapContent().length - 1 : prev - 1
-            );
+        if (
+          isAutoMapContext(mantisContext) &&
+          isAMTraversalType(props.mantisComponentType)
+        ) {
+          switch (event.key) {
+            case "d":
+              setAutoMapIndex((prev) => (prev + 1) % autoMapContent().length);
+              break;
+            case "a":
+              setAutoMapIndex((prev) =>
+                prev === 0 ? autoMapContent().length - 1 : prev - 1
+              );
+              break;
+            case "w":
+              mantisContext.setIsAutoZoomed(false);
+              break;
+            case "s":
+              mantisContext.setIsAutoZoomed(true);
+              break;
+            case "e":
+              setMagnificationCenterX(mantisContext.selNodeCenter().x);
+              setMagnificationCenterY(mantisContext.selNodeCenter().y);
+              if (!mouseActive()) {
+                setMouseX(mantisContext.selNodeCenter().x);
+                setMouseY(mantisContext.selNodeCenter().y);
+              }
           }
         }
       } else if (
@@ -1578,6 +1611,18 @@ export function Bluefish(props: BluefishProps) {
             x: autoMapCenter.x,
             y: autoMapCenter.y,
           });
+          mantisContext.setAllViewBoxes(
+            autoMapContent().map((nodeId) => {
+              const currContentBBox = getBbox(nodeId) ?? {
+                left: 0,
+                top: 0,
+                width: 0,
+                height: 0,
+              };
+              const currContentTransform = calculateTransform(nodeId);
+              return `${(currContentBBox.left ?? 0) + currContentTransform.x} ${(currContentBBox.top ?? 0) + currContentTransform.y} ${currContentBBox.width} ${currContentBBox.height}`;
+            })
+          );
         } else if (isAMAutoType(props.mantisComponentType) && svgRef) {
           // Update the automatic screen to center around the selected node
           // and zoom to the specified zoom level.
@@ -1585,7 +1630,11 @@ export function Bluefish(props: BluefishProps) {
           setMagnificationCenterX(mantisContext.selNodeCenter().x);
           setMagnificationCenterY(mantisContext.selNodeCenter().y);
           gsap.to(svgRef, {
-            attr: { viewBox: magnificationViewBox() },
+            attr: {
+              viewBox: mantisContext.isAutoZoomed()
+                ? magnificationViewBox()
+                : defaultViewBox(),
+            },
             duration: GSAP_DURATION,
             onUpdate: updateGSAPCenter,
           });
@@ -1699,6 +1748,25 @@ export function Bluefish(props: BluefishProps) {
         };
       });
 
+      // Event Listener
+      let polygonRef: SVGPolygonElement | undefined;
+      function onPolygonClick(e: MouseEvent | TouchEvent) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (props.onClick) props.onClick();
+      }
+      createEffect(() => {
+        if (polygonRef) {
+          polygonRef.addEventListener("click", onPolygonClick, false);
+        }
+
+        onCleanup(() => {
+          if (polygonRef) {
+            polygonRef.removeEventListener("click", onPolygonClick, false);
+          }
+        });
+      });
+
       return (
         <polygon
           id="mantis-ui-arrow"
@@ -1709,10 +1777,7 @@ export function Bluefish(props: BluefishProps) {
           style={{
             filter: `drop-shadow(${0.3 / gsapMagnificationFactor()}rem ${0.3 / gsapMagnificationFactor()}rem ${0.5 / gsapMagnificationFactor()}rem rgba(0, 0, 0, 0.7))`,
           }}
-          onClick={(e) => {
-            e.stopImmediatePropagation();
-            if (props.onClick) props.onClick();
-          }}
+          ref={polygonRef}
         />
       );
     };
@@ -1734,7 +1799,7 @@ export function Bluefish(props: BluefishProps) {
 
       return (
         <>
-          {showHighlighting() && (
+          {(showHighlighting() || isAutoMapContext(mantisContext)) && (
             <rect
               x={vbX()}
               y={vbY()}
@@ -1985,7 +2050,7 @@ export function Bluefish(props: BluefishProps) {
                         relatedNodes().includes(
                           scopeMap.getKey(neighborNodeId) ?? ""
                         )
-                          ? "orange"
+                          ? "orangered"
                           : "purple";
 
                       return (
@@ -2034,36 +2099,61 @@ export function Bluefish(props: BluefishProps) {
                 : mantisContext.leftViewBBox() !== defaultViewBox() && (
                     <ViewBoxRect
                       viewBox={mantisContext.leftViewBBox()}
-                      stroke="orange"
+                      stroke="orangered"
                       strokeWidth={2}
                     />
                   ))}
             {/* Auto-Map Indicators */}
             {isAutoMapContext(mantisContext) &&
-              (isAMTraversalType(props.mantisComponentType)
-                ? !isPointInViewBox(
-                    mantisContext.selNodeCenter(),
-                    magnificationViewBox()
-                  ) &&
-                  isZoomed() && (
-                    <OffScreenArrow
-                      targetPoint={mantisContext.selNodeCenter()}
-                      arrowheadColor="blue"
-                    />
-                  )
-                : !isPointInViewBox(
-                    getViewBoxCenter(mantisContext.mainViewBox()),
-                    magnificationViewBox()
-                  ) && (
-                    <>
+              (isAMTraversalType(props.mantisComponentType) ? (
+                !isPointInViewBox(
+                  mantisContext.selNodeCenter(),
+                  magnificationViewBox()
+                ) &&
+                isZoomed() &&
+                mantisContext.isAutoZoomed() && (
+                  <OffScreenArrow
+                    targetPoint={mantisContext.selNodeCenter()}
+                    arrowheadColor="blue"
+                    onClick={() => {
+                      setMagnificationCenterX(mantisContext.selNodeCenter().x);
+                      setMagnificationCenterY(mantisContext.selNodeCenter().y);
+                      if (!mouseActive()) {
+                        setMouseX(mantisContext.selNodeCenter().x);
+                        setMouseY(mantisContext.selNodeCenter().y);
+                      }
+                    }}
+                  />
+                )
+              ) : (
+                <>
+                  {mantisContext.isAutoZoomed() ? (
+                    !isPointInViewBox(
+                      getViewBoxCenter(mantisContext.mainViewBox()),
+                      magnificationViewBox()
+                    ) && (
                       <OffScreenArrow
                         targetPoint={getViewBoxCenter(
                           mantisContext.mainViewBox()
                         )}
-                        arrowheadColor="orange"
+                        arrowheadColor="orangered"
                       />
-                    </>
-                  ))}
+                    )
+                  ) : (
+                    <For each={mantisContext.allViewBoxes()}>
+                      {(autoViewBox) => {
+                        return (
+                          <ViewBoxRect
+                            viewBox={autoViewBox}
+                            stroke="blue"
+                            strokeWidth={2}
+                          />
+                        );
+                      }}
+                    </For>
+                  )}
+                </>
+              ))}
             {/* Cursor Position */}
             <circle cx={mouseX()} cy={mouseY()} r={3} fill={getCursorColor()} />
           </>
