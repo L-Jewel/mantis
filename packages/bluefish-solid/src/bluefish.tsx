@@ -1600,9 +1600,10 @@ export function Bluefish(props: BluefishProps) {
         setCurrentNodeId(
           resolveNode(bubbleNodeData()[closestPointBubble].nodeId)
         );
-        setPreviewNodeId(
-          resolveNode(previewNodeData()[closestPointImportant].nodeId)
-        );
+        if (!isNaN(closestPointImportant))
+          setPreviewNodeId(
+            resolveNode(previewNodeData()[closestPointImportant].nodeId)
+          );
 
         if (props.mantisTraversalPattern === MantisTraversalPattern.Bubble) {
           // Update the user's view to center around the selected node.
