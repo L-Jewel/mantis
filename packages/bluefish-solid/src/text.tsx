@@ -35,7 +35,6 @@ export const Text = withBluefish(
     );
 
     const [_, textProps] = splitProps(props, [
-      "name",
       "dx",
       "dy",
       "innerRef",

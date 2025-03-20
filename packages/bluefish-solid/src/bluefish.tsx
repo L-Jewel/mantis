@@ -383,8 +383,8 @@ export function Bluefish(props: BluefishProps) {
   let svgRef: SVGSVGElement | undefined;
   const showHighlighting = () => props.showHighlighting ?? false;
   const mantisContext = useMantisProvider();
-  const [bubbleMidpoints, setBubbleMidpoints] = createSignal<NodeInfo[]>([]);
-  const [previewMidpoints, setPreviewMidpoints] = createSignal<NodeInfo[]>([]);
+  const [bubbleNodeData, setBubbleNodeData] = createSignal<NodeInfo[]>([]);
+  const [previewNodeData, setPreviewNodeData] = createSignal<NodeInfo[]>([]);
   const previewNodeInfo = new Map<string, NodeInfo>();
   /**
    * scopeName <=> nodeId
@@ -759,8 +759,8 @@ export function Bluefish(props: BluefishProps) {
         }
       }
 
-      setBubbleMidpoints(newBubbleMidpoints);
-      setPreviewMidpoints(newPreviewMidpoints);
+      setBubbleNodeData(newBubbleMidpoints);
+      setPreviewNodeData(newPreviewMidpoints);
     } else if (
       isTraversalType(props.mantisComponentType) ||
       props.mantisComponentType === MantisComponentType.LLens
@@ -782,10 +782,9 @@ export function Bluefish(props: BluefishProps) {
           width: nodeBbox.width ?? 0,
           height: nodeBbox.height ?? 0,
         });
-        // bubbleMidpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
       }
 
-      setBubbleMidpoints(newMidpoints);
+      setBubbleNodeData(newMidpoints);
     }
   });
 
@@ -1079,13 +1078,13 @@ export function Bluefish(props: BluefishProps) {
     // TODO - For performance, maybe only calculate this for certain component types
     const bubbleDelaunay = () =>
       d3.Delaunay.from(
-        bubbleMidpoints(),
+        bubbleNodeData(),
         (d) => d.cx,
         (d) => d.cy
       );
     const previewDelaunay = () =>
       d3.Delaunay.from(
-        previewMidpoints(),
+        previewNodeData(),
         (d) => d.cx,
         (d) => d.cy
       );
@@ -1433,7 +1432,7 @@ export function Bluefish(props: BluefishProps) {
               setMagnificationCenterX(targetNodeCenter.x);
               setMagnificationCenterY(targetNodeCenter.y);
               setPreviewNodeId(
-                previewMidpoints()[
+                previewNodeData()[
                   previewDelaunay().find(targetNodeCenter.x, targetNodeCenter.y)
                 ].nodeId
               );
@@ -1599,10 +1598,10 @@ export function Bluefish(props: BluefishProps) {
         });
 
         setCurrentNodeId(
-          resolveNode(bubbleMidpoints()[closestPointBubble].nodeId)
+          resolveNode(bubbleNodeData()[closestPointBubble].nodeId)
         );
         setPreviewNodeId(
-          resolveNode(previewMidpoints()[closestPointImportant].nodeId)
+          resolveNode(previewNodeData()[closestPointImportant].nodeId)
         );
 
         if (props.mantisTraversalPattern === MantisTraversalPattern.Bubble) {
@@ -1805,6 +1804,7 @@ export function Bluefish(props: BluefishProps) {
     const OffScreenArrow = (props: {
       targetPoint: Point;
       arrowheadColor?: string;
+      nodeId?: string;
       onClick?: () => void;
     }) => {
       // CONSTANTS
@@ -1926,18 +1926,58 @@ export function Bluefish(props: BluefishProps) {
         });
       });
 
+      // Arrow Icons
+      const [arrowIcon, setArrowIcon] = createSignal<
+        SVGTextElement | undefined
+      >(undefined);
+      createEffect(() => {
+        if (svgRef && props.nodeId && getNodeType(props.nodeId) === "Text") {
+          const node = previewNodeInfo.get(props.nodeId);
+          if (node) {
+            const textLabel = svgRef.querySelector(`[name="${props.nodeId}"]`);
+            if (textLabel) {
+              // const clonedNode = textLabel.cloneNode(true) as SVGTextElement;
+              setArrowIcon(textLabel as SVGTextElement);
+            }
+          }
+        }
+      });
+
       return (
-        <polygon
-          id="mantis-ui-arrow"
-          points={`${arrowTip().x},${arrowTip().y} ${notchLeft().x},${notchLeft().y} ${arrowCenter().x},${arrowCenter().y} ${notchRight().x},${notchRight().y}`}
-          fill={mergedProps.arrowheadColor}
-          stroke={"black"}
-          stroke-width={0}
-          style={{
-            filter: `drop-shadow(${0.3 / gsapMagnificationFactor()}rem ${0.3 / gsapMagnificationFactor()}rem ${0.5 / gsapMagnificationFactor()}rem rgba(0, 0, 0, 0.7))`,
-          }}
-          ref={polygonRef}
-        />
+        <>
+          <polygon
+            id="mantis-ui-arrow"
+            points={`${arrowTip().x},${arrowTip().y} ${notchLeft().x},${notchLeft().y} ${arrowCenter().x},${arrowCenter().y} ${notchRight().x},${notchRight().y}`}
+            fill={mergedProps.arrowheadColor}
+            stroke={"black"}
+            stroke-width={0}
+            style={{
+              filter: `drop-shadow(${0.3 / gsapMagnificationFactor()}rem ${0.3 / gsapMagnificationFactor()}rem ${0.5 / gsapMagnificationFactor()}rem rgba(0, 0, 0, 0.7))`,
+            }}
+            ref={polygonRef}
+          />
+          {arrowIcon() && (
+            <text
+              x={iconCenter().x}
+              y={iconCenter().y}
+              fill={arrowIcon()?.getAttribute("fill") ?? "black"}
+              font-size={arrowIcon()?.getAttribute("font-size") ?? "14"}
+              font-family={
+                arrowIcon()?.getAttribute("font-family") ??
+                "Alegreya Sans, sans-serif"
+              }
+              font-weight={arrowIcon()?.getAttribute("font-weight") ?? "700"}
+              text-anchor="middle"
+              alignment-baseline="middle"
+              dominant-baseline="middle"
+              style={{
+                filter: `drop-shadow(${0.1 / gsapMagnificationFactor()}rem ${0.1 / gsapMagnificationFactor()}rem ${0.2 / gsapMagnificationFactor()}rem white)`,
+              }}
+            >
+              {arrowIcon()?.textContent}
+            </text>
+          )}
+        </>
       );
     };
     const ViewBoxRect = (props: {
@@ -2004,7 +2044,7 @@ export function Bluefish(props: BluefishProps) {
               props.lensInfo.y
             );
             if (isNaN(closestPointIndex)) return;
-            const closestPoint = bubbleMidpoints()[closestPointIndex];
+            const closestPoint = bubbleNodeData()[closestPointIndex];
             setRectX(closestPoint.cx);
             setRectY(closestPoint.cy);
           } else {
@@ -2206,7 +2246,7 @@ export function Bluefish(props: BluefishProps) {
                       if (neighborIndex === undefined || neighborIndex < 0)
                         return;
                       const neighborNodeMidpoint = () =>
-                        previewMidpoints()[neighborIndex];
+                        previewNodeData()[neighborIndex];
                       const neighborNodeId = neighborNodeMidpoint().nodeId;
                       // Determine whether or not to show the arrow.
                       const neighborBbox = getBbox(neighborNodeId);
@@ -2215,8 +2255,11 @@ export function Bluefish(props: BluefishProps) {
                       const showArrow = () =>
                         isZoomed() &&
                         !viewBoxOverlaps(
-                          magnificationViewBox(),
-                          `${neighborXY.x} ${neighborXY.y} ${neighborBbox.width} ${neighborBbox.height}`
+                          `${magnificationX()} ${magnificationY()} ${actualWidth() / magnificationFactor()} ${actualHeight() / magnificationFactor()}`,
+                          `${neighborXY.x} ${neighborXY.y} ${neighborBbox.width} ${neighborBbox.height}`,
+                          Math.min(actualWidth(), actualHeight()) /
+                            magnificationFactor() /
+                            10
                         );
                       // Determine the color of the arrow (orange if related, purple if not)
 
@@ -2237,6 +2280,7 @@ export function Bluefish(props: BluefishProps) {
                           <OffScreenArrow
                             targetPoint={targetPoint}
                             arrowheadColor={arrowColor()}
+                            nodeId={neighborNodeId}
                             onClick={() => {
                               setMagnificationCenterX(
                                 neighborNodeMidpoint().cx
