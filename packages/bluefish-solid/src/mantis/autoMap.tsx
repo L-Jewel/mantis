@@ -34,7 +34,7 @@ export const AutoMap = (
   props: ParentProps & {
     traversalPattern?: MantisTraversalPattern;
     flexDirection: "row" | "column";
-    diagram: "Planets" | "Python-Tutor";
+    diagram: "Planets" | "Python-Tutor" | "Pulley";
     showVoronoi?: boolean;
     showHighlighting?: boolean;
     parameterOverrides?: MantisOverrides;
@@ -52,6 +52,8 @@ export const AutoMap = (
         return MantisComponentType.AMPlanetsTraversal;
       case "Python-Tutor":
         return MantisComponentType.AMPyTutorTraversal;
+      case "Pulley":
+        return MantisComponentType.AMPulleyTraversal;
     }
   };
   const autoType = () => {
@@ -60,6 +62,8 @@ export const AutoMap = (
         return MantisComponentType.AMPlanetsAuto;
       case "Python-Tutor":
         return MantisComponentType.AMPyTutorAuto;
+      case "Pulley":
+        return MantisComponentType.AMPulleyAuto;
     }
   };
 

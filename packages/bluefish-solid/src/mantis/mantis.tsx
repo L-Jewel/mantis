@@ -14,6 +14,8 @@ export enum MantisComponentType {
   SSRight,
   AMPlanetsTraversal,
   AMPlanetsAuto,
+  AMPulleyTraversal,
+  AMPulleyAuto,
   AMPyTutorTraversal,
   AMPyTutorAuto,
   LMain,
@@ -45,7 +47,8 @@ export function isSplitScreenType(type: MantisComponentType | undefined) {
 export function isAMAutoType(type: MantisComponentType | undefined) {
   return (
     type === MantisComponentType.AMPlanetsAuto ||
-    type === MantisComponentType.AMPyTutorAuto
+    type === MantisComponentType.AMPyTutorAuto ||
+    type === MantisComponentType.AMPulleyAuto
   );
 }
 /**
@@ -55,7 +58,8 @@ export function isAMAutoType(type: MantisComponentType | undefined) {
 export function isAMTraversalType(type: MantisComponentType | undefined) {
   return (
     type === MantisComponentType.AMPlanetsTraversal ||
-    type === MantisComponentType.AMPyTutorTraversal
+    type === MantisComponentType.AMPyTutorTraversal ||
+    type === MantisComponentType.AMPulleyTraversal
   );
 }
 /**

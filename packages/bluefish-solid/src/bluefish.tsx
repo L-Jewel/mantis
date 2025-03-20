@@ -27,7 +27,6 @@ import {
   createUniqueId,
   mergeProps,
   onCleanup,
-  onMount,
   untrack,
 } from "solid-js";
 import { ParentScopeIdContext, Scope, ScopeContext } from "./createName";
@@ -54,6 +53,7 @@ import {
   MantisTraversalPattern,
   useMantisProvider,
 } from "./mantis";
+import { set } from "lodash";
 
 export type MantisOverrides = {
   cursorEpsilon?: number;
@@ -90,6 +90,15 @@ type BluefishNodeType = {
 type Point = {
   x: number;
   y: number;
+};
+type NodeInfo = {
+  nodeId: string;
+  left: number;
+  top: number;
+  cx: number;
+  cy: number;
+  width: number;
+  height: number;
 };
 
 /**
@@ -152,6 +161,7 @@ const getNodeRelations = (
         ["heap-arrow-3-1", ["address-3", "address-4"]],
       ]);
     }
+    case MantisComponentType.AMPulleyTraversal:
     case MantisComponentType.PreviewPulley: {
       return new Map<string, string[]>([
         ["l0", ["rect", "B"]],
@@ -161,6 +171,15 @@ const getNodeRelations = (
         ["l4", ["A", "w1-weight", "t4"]],
         ["l5", ["A", "w2-weight", "t5"]],
         ["l6", ["C", "w2-weight", "t6"]],
+        ["rect", ["l0", "l3", "t3", "B", "C"]],
+        [
+          "A",
+          ["l1", "l4", "l5", "t1", "t4", "t5", "B", "w1-weight", "w2-weight"],
+        ],
+        ["B", ["l0", "l1", "l2", "t1", "t2", "A", "C", "rect"]],
+        ["C", ["l2", "l3", "l6", "t2", "t3", "t6", "B", "rect", "w2-weight"]],
+        ["w1-weight", ["l4", "A", "t4"]],
+        ["w2-weight", ["l5", "l6", "A", "C", "t5", "t6"]],
         ["t1", ["l1"]],
         ["t2", ["l2"]],
         ["t3", ["l3"]],
@@ -214,6 +233,7 @@ const getPreviewNodes = (
         "stackSlot-2",
       ]);
     }
+    case MantisComponentType.AMPulleyTraversal:
     case MantisComponentType.PreviewPulley: {
       return new Set([
         "l0",
@@ -274,6 +294,7 @@ const getIndicatorNodes = (
         "stackSlot-2",
       ]);
     }
+    case MantisComponentType.AMPulleyTraversal:
     case MantisComponentType.PreviewPulley: {
       return new Set([
         "t1",
@@ -362,10 +383,9 @@ export function Bluefish(props: BluefishProps) {
   let svgRef: SVGSVGElement | undefined;
   const showHighlighting = () => props.showHighlighting ?? false;
   const mantisContext = useMantisProvider();
-  const [bubbleMidpoints, setBubbleMidpoints] = createSignal<Point[]>([]);
-  const [previewMidpoints, setPreviewMidpoints] = createSignal<Point[]>([]);
-  const bubbleMidpointsToNodes = new BiMap<string, string>();
-  const previewMidpointsToNodes = new BiMap<string, string>();
+  const [bubbleMidpoints, setBubbleMidpoints] = createSignal<NodeInfo[]>([]);
+  const [previewMidpoints, setPreviewMidpoints] = createSignal<NodeInfo[]>([]);
+  const previewNodeInfo = new Map<string, NodeInfo>();
   /**
    * scopeName <=> nodeId
    */
@@ -540,14 +560,6 @@ export function Bluefish(props: BluefishProps) {
       return computeBoundingBoxLine(node.refId);
     }
   }
-  function pointToString(point: Point): string {
-    return `${point.x},${point.y}`;
-  }
-  function stringToPoint(pointString: string): Point | undefined {
-    const [x, y] = pointString.split(",").map(Number);
-    if (isNaN(x) || isNaN(y)) return undefined;
-    return { x: x ?? 0, y: y ?? 0 };
-  }
   /**
    * @param nodeId a string that corresponds to the ID of a node in the scenegraph
    * @returns the node's bbox
@@ -681,10 +693,12 @@ export function Bluefish(props: BluefishProps) {
       case MantisComponentType.SSLeft:
       case MantisComponentType.AMPlanetsTraversal:
       case MantisComponentType.AMPyTutorTraversal:
+      case MantisComponentType.AMPulleyTraversal:
         return "orangered";
       case MantisComponentType.SSRight:
       case MantisComponentType.AMPlanetsAuto:
       case MantisComponentType.AMPyTutorAuto:
+      case MantisComponentType.AMPulleyAuto:
         return "blue";
       default:
         return "red";
@@ -697,8 +711,8 @@ export function Bluefish(props: BluefishProps) {
       isPreviewType(props.mantisComponentType) ||
       isAMTraversalType(props.mantisComponentType)
     ) {
-      const newBubbleMidpoints: Point[] = [];
-      const newPreviewMidpoints: Point[] = [];
+      const newBubbleMidpoints: NodeInfo[] = [];
+      const newPreviewMidpoints: NodeInfo[] = [];
       /**
        * Sometimes, the name of the node contains a changing ID. With this
        * function, we can just use the part of the name that doesn't change
@@ -727,15 +741,21 @@ export function Bluefish(props: BluefishProps) {
         if (getNodeType(nodeId) === "Ref") continue;
         const nodeBbox = getBbox(nodeId);
         const nodeTransform = calculateTransform(nodeId);
-        const nodeMidpoint = {
-          x: nodeTransform.x + (nodeBbox.left ?? 0) + (nodeBbox.width ?? 0) / 2,
-          y: nodeTransform.y + (nodeBbox.top ?? 0) + (nodeBbox.height ?? 0) / 2,
+        const nodeX = nodeTransform.x + (nodeBbox.left ?? 0);
+        const nodeY = nodeTransform.y + (nodeBbox.top ?? 0);
+        const newNodeInfo: NodeInfo = {
+          nodeId,
+          left: nodeX,
+          top: nodeY,
+          cx: nodeX + (nodeBbox.width ?? 0) / 2,
+          cy: nodeY + (nodeBbox.height ?? 0) / 2,
+          width: nodeBbox.width ?? 0,
+          height: nodeBbox.height ?? 0,
         };
-        newBubbleMidpoints.push(nodeMidpoint);
-        bubbleMidpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
+        newBubbleMidpoints.push(newNodeInfo);
         if (previewNodeIds.has(nodeId)) {
-          newPreviewMidpoints.push(nodeMidpoint);
-          previewMidpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
+          newPreviewMidpoints.push(newNodeInfo);
+          previewNodeInfo.set(nodeId, newNodeInfo);
         }
       }
 
@@ -751,12 +771,18 @@ export function Bluefish(props: BluefishProps) {
         if (getNodeType(nodeId) === "Ref") continue;
         const nodeBbox = getBbox(nodeId);
         const nodeTransform = calculateTransform(nodeId);
-        const nodeMidpoint = {
-          x: nodeTransform.x + (nodeBbox.left ?? 0) + (nodeBbox.width ?? 0) / 2,
-          y: nodeTransform.y + (nodeBbox.top ?? 0) + (nodeBbox.height ?? 0) / 2,
-        };
-        newMidpoints.push(nodeMidpoint);
-        bubbleMidpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
+        const nodeX = nodeTransform.x + (nodeBbox.left ?? 0);
+        const nodeY = nodeTransform.y + (nodeBbox.top ?? 0);
+        newMidpoints.push({
+          nodeId,
+          left: nodeX,
+          top: nodeY,
+          cx: nodeX + (nodeBbox.width ?? 0) / 2,
+          cy: nodeY + (nodeBbox.height ?? 0) / 2,
+          width: nodeBbox.width ?? 0,
+          height: nodeBbox.height ?? 0,
+        });
+        // bubbleMidpointsToNodes.set(pointToString(nodeMidpoint), nodeId);
       }
 
       setBubbleMidpoints(newMidpoints);
@@ -841,7 +867,7 @@ export function Bluefish(props: BluefishProps) {
       props.parameterOverrides?.gsapDuration ??
       (props.mantisTraversalPattern === MantisTraversalPattern.Bubble
         ? 0.75
-        : 1.25);
+        : 1);
     const SCROLL_DELTA = props.parameterOverrides?.scrollDelta ?? 0.2;
     const CURSOR_EPSILON = props.parameterOverrides?.cursorEpsilon ?? 3;
     const TRADITIONAL_EPSILON =
@@ -1054,14 +1080,14 @@ export function Bluefish(props: BluefishProps) {
     const bubbleDelaunay = () =>
       d3.Delaunay.from(
         bubbleMidpoints(),
-        (d) => d.x,
-        (d) => d.y
+        (d) => d.cx,
+        (d) => d.cy
       );
     const previewDelaunay = () =>
       d3.Delaunay.from(
         previewMidpoints(),
-        (d) => d.x,
-        (d) => d.y
+        (d) => d.cx,
+        (d) => d.cy
       );
     const bubbleVoronoi = () =>
       bubbleDelaunay().voronoi([
@@ -1270,7 +1296,6 @@ export function Bluefish(props: BluefishProps) {
     function endDrag() {
       if (isMiniMapContext(mantisContext)) mantisContext.setIsDragging(false);
       else if (isMultiLensContext(mantisContext)) {
-        // TODO - Reactivity error? It works anyway so I will leave it for now.
         mantisContext.updateLensInfo((prevList) =>
           prevList.map((item, i) =>
             i === props.mantisId ? { ...item, x: rectX(), y: rectY() } : item
@@ -1377,9 +1402,9 @@ export function Bluefish(props: BluefishProps) {
     function handleKeyPress(event: KeyboardEvent) {
       if (isTraversalType(props.mantisComponentType) && elementActive()) {
         if (event.key === "f") setMouseActive(!mouseActive());
-        else if (event.shiftKey && event.key === "ArrowUp") {
+        else if (event.shiftKey && event.key === "ArrowUp" && isZoomed()) {
           setMagnificationFactor((prev) => Math.floor(prev) + 1);
-        } else if (event.shiftKey && event.key === "ArrowDown") {
+        } else if (event.shiftKey && event.key === "ArrowDown" && isZoomed()) {
           setMagnificationFactor((prev) => Math.max(1, Math.ceil(prev) - 1));
         }
         // Allows for users to cycle through the auto-focus of the Auto Map.
@@ -1402,14 +1427,22 @@ export function Bluefish(props: BluefishProps) {
             case "s":
               mantisContext.setIsAutoZoomed(true);
               break;
-            case "e":
+            case "e": {
               // TODO - Fix bug where it doesn't jump when the mouse is frozen
-              setMagnificationCenterX(mantisContext.selNodeCenter().x);
-              setMagnificationCenterY(mantisContext.selNodeCenter().y);
+              const targetNodeCenter = mantisContext.selNodeCenter();
+              setMagnificationCenterX(targetNodeCenter.x);
+              setMagnificationCenterY(targetNodeCenter.y);
+              setPreviewNodeId(
+                previewMidpoints()[
+                  previewDelaunay().find(targetNodeCenter.x, targetNodeCenter.y)
+                ].nodeId
+              );
+              setAutoMapIndex(0);
               if (!mouseActive()) {
-                setMouseX(mantisContext.selNodeCenter().x);
-                setMouseY(mantisContext.selNodeCenter().y);
+                setMouseX(targetNodeCenter.x);
+                setMouseY(targetNodeCenter.y);
               }
+            }
           }
         }
       } else if (
@@ -1565,14 +1598,12 @@ export function Bluefish(props: BluefishProps) {
           return newVal;
         });
 
-        const closestNode = bubbleMidpointsToNodes.getValue(
-          pointToString(bubbleMidpoints()[closestPointBubble])
+        setCurrentNodeId(
+          resolveNode(bubbleMidpoints()[closestPointBubble].nodeId)
         );
-        setCurrentNodeId(resolveNode(closestNode ?? id));
-        const closestPreviewNode = previewMidpointsToNodes.getValue(
-          pointToString(previewMidpoints()[closestPointImportant])
+        setPreviewNodeId(
+          resolveNode(previewMidpoints()[closestPointImportant].nodeId)
         );
-        setPreviewNodeId(resolveNode(closestPreviewNode ?? id));
 
         if (props.mantisTraversalPattern === MantisTraversalPattern.Bubble) {
           // Update the user's view to center around the selected node.
@@ -1695,24 +1726,50 @@ export function Bluefish(props: BluefishProps) {
         .filter((node) => indicatorNodes().has(node))
         .map((node) => scopeMap.getValue(node))
         .filter((nodeId) => nodeId !== undefined);
-      return [...relatedNodeIds, previewNodeId()];
+      return [previewNodeId(), ...relatedNodeIds];
     };
+    /**
+     * Calculates the zoom level required to zoom around a node given its nodeId.
+     *
+     * @param nodeId - The ID of the node to zoom around.
+     * @returns The zoom level required to zoom around the node.
+     */
+    function calculateZoomLevel(nodeId: string): number {
+      const nodeBbox = getBbox(nodeId);
+      const nodeWidth = nodeBbox.width ?? 0;
+      const nodeHeight = nodeBbox.height ?? 0;
+
+      const zoomLevelX = actualWidth() / nodeWidth;
+      const zoomLevelY = actualHeight() / nodeHeight;
+
+      return Math.min(zoomLevelX, zoomLevelY) * 0.8;
+    }
     const [autoMapIndex, setAutoMapIndex] = createSignal(0);
     createEffect(() => {
       if (isAutoMapContext(mantisContext)) {
+        // Update the main context with information from the Traversal component.
         if (isAMTraversalType(props.mantisComponentType)) {
           mantisContext.setMainViewBox(magnificationViewBox());
-          mantisContext.setZoomLevel(Math.max(1, magnificationFactor() - 1));
-          const autoMapCenter = stringToPoint(
-            bubbleMidpointsToNodes.getKey(
-              autoMapContent()[autoMapIndex() ?? 0]
-            ) ?? ""
+          // The traversal component keeps track of which node is currently selected to be viewed
+          // by the auto component. Right now, the user just uses 'a' and 'd' to cycle through the nodes.
+          // TODO - Maybe we can be more helpful in this cycling process?
+          const autoMapNode = previewNodeInfo.get(
+            autoMapContent()[autoMapIndex() ?? 0]
           );
-          if (!autoMapCenter) return;
+          if (!autoMapNode) return;
           mantisContext.setSelNodeCenter({
-            x: autoMapCenter.x,
-            y: autoMapCenter.y,
+            x: autoMapNode.cx,
+            y: autoMapNode.cy,
           });
+          // At the moment, the zoom is just one zoom level behind the traversal component.
+          // TODO - Content-aware zoom?
+          mantisContext.setZoomLevel(
+            autoMapNode.nodeId === previewNodeId()
+              ? Math.max(1, magnificationFactor() - 1)
+              : Math.max(1, calculateZoomLevel(autoMapNode.nodeId))
+          );
+          // Provides the auto component with a list of all of the view boxes of the related nodes.
+          // That way, when the user presses "w", they can see all of the related nodes at once.
           mantisContext.setAllViewBoxes(
             autoMapContent().map((nodeId) => {
               const currContentBBox = getBbox(nodeId) ?? {
@@ -1948,8 +2005,8 @@ export function Bluefish(props: BluefishProps) {
             );
             if (isNaN(closestPointIndex)) return;
             const closestPoint = bubbleMidpoints()[closestPointIndex];
-            setRectX(closestPoint.x);
-            setRectY(closestPoint.y);
+            setRectX(closestPoint.cx);
+            setRectY(closestPoint.cy);
           } else {
             setRectX(props.lensInfo.x);
             setRectY(props.lensInfo.y);
@@ -2079,7 +2136,8 @@ export function Bluefish(props: BluefishProps) {
                 {/* Dynamic Highlighting */}
                 <Show when={showHighlighting()}>
                   {/* Highlight Selected Node */}
-                  {isPreviewType(props.mantisComponentType) ? (
+                  {isPreviewType(props.mantisComponentType) ||
+                  isAMTraversalType(props.mantisComponentType) ? (
                     <rect
                       stroke="green"
                       fill="none"
@@ -2105,7 +2163,8 @@ export function Bluefish(props: BluefishProps) {
                     each={
                       nodeRelations().get(
                         scopeMap.getKey(
-                          isPreviewType(props.mantisComponentType)
+                          isPreviewType(props.mantisComponentType) ||
+                            isAMTraversalType(props.mantisComponentType)
                             ? previewNodeId()
                             : currentNodeId()
                         ) ?? ""
@@ -2148,10 +2207,7 @@ export function Bluefish(props: BluefishProps) {
                         return;
                       const neighborNodeMidpoint = () =>
                         previewMidpoints()[neighborIndex];
-                      const neighborNodeId = bubbleMidpointsToNodes.getValue(
-                        pointToString(neighborNodeMidpoint())
-                      );
-                      if (!neighborNodeId) return;
+                      const neighborNodeId = neighborNodeMidpoint().nodeId;
                       // Determine whether or not to show the arrow.
                       const neighborBbox = getBbox(neighborNodeId);
                       const neighborXY =
@@ -2171,17 +2227,26 @@ export function Bluefish(props: BluefishProps) {
                           ? "orangered"
                           : "purple";
 
+                      const targetPoint = {
+                        x: neighborNodeMidpoint().cx,
+                        y: neighborNodeMidpoint().cy,
+                      };
+
                       return (
                         <Show when={showArrow()}>
                           <OffScreenArrow
-                            targetPoint={neighborNodeMidpoint()}
+                            targetPoint={targetPoint}
                             arrowheadColor={arrowColor()}
                             onClick={() => {
-                              setMagnificationCenterX(neighborNodeMidpoint().x);
-                              setMagnificationCenterY(neighborNodeMidpoint().y);
+                              setMagnificationCenterX(
+                                neighborNodeMidpoint().cx
+                              );
+                              setMagnificationCenterY(
+                                neighborNodeMidpoint().cy
+                              );
                               if (!mouseActive()) {
-                                setMouseX(neighborNodeMidpoint().x);
-                                setMouseY(neighborNodeMidpoint().y);
+                                setMouseX(neighborNodeMidpoint().cx);
+                                setMouseY(neighborNodeMidpoint().cy);
                               }
                             }}
                           />
@@ -2273,7 +2338,14 @@ export function Bluefish(props: BluefishProps) {
                 </>
               ))}
             {/* Cursor Position */}
-            <circle cx={mouseX()} cy={mouseY()} r={3} fill={getCursorColor()} />
+            {!isAMAutoType(props.mantisComponentType) && (
+              <circle
+                cx={mouseX()}
+                cy={mouseY()}
+                r={3}
+                fill={getCursorColor()}
+              />
+            )}
           </>
         )}
       </svg>
