@@ -17,8 +17,10 @@ import {
   Accessor,
   For,
   JSX,
+  Match,
   ParentProps,
   Show,
+  Switch,
   createContext,
   createEffect,
   createMemo,
@@ -53,7 +55,6 @@ import {
   MantisTraversalPattern,
   useMantisProvider,
 } from "./mantis";
-import { set } from "lodash";
 
 export type MantisOverrides = {
   cursorEpsilon?: number;
@@ -112,7 +113,6 @@ const getNodeRelations = (
     case MantisComponentType.AMPlanetsTraversal:
     case MantisComponentType.PreviewPlanets: {
       return new Map<string, string[]>([
-        ["planets-stackh", ["mercury", "venus", "earth", "mars"]],
         ["mercury", ["label", "arrow"]],
         ["label", ["mercury", "arrow"]],
         ["arrow", ["label", "mercury"]],
@@ -203,15 +203,7 @@ const getPreviewNodes = (
   switch (type) {
     case MantisComponentType.AMPlanetsTraversal:
     case MantisComponentType.PreviewPlanets: {
-      return new Set([
-        "planets-stackh",
-        "mercury",
-        "venus",
-        "earth",
-        "mars",
-        "label",
-        "arrow",
-      ]);
+      return new Set(["mercury", "venus", "earth", "mars", "label", "arrow"]);
     }
     case MantisComponentType.AMPyTutorTraversal:
     case MantisComponentType.PreviewPythonTutor: {
@@ -272,14 +264,7 @@ const getIndicatorNodes = (
   switch (type) {
     case MantisComponentType.AMPlanetsTraversal:
     case MantisComponentType.PreviewPlanets: {
-      return new Set([
-        "planets-stackh",
-        "mercury",
-        "venus",
-        "earth",
-        "mars",
-        "label",
-      ]);
+      return new Set(["mercury", "venus", "earth", "mars", "label"]);
     }
     case MantisComponentType.AMPyTutorTraversal:
     case MantisComponentType.PreviewPythonTutor: {
@@ -862,14 +847,14 @@ export function Bluefish(props: BluefishProps) {
     children: JSX.Element;
   }) => {
     // "GLOBAL" CONSTANTS
-    const GSAP_DURATION =
+    const GSAP_DURATION = () =>
       props.parameterOverrides?.gsapDuration ??
       (props.mantisTraversalPattern === MantisTraversalPattern.Bubble
         ? 0.75
         : 1);
-    const SCROLL_DELTA = props.parameterOverrides?.scrollDelta ?? 0.2;
-    const CURSOR_EPSILON = props.parameterOverrides?.cursorEpsilon ?? 3;
-    const TRADITIONAL_EPSILON =
+    const SCROLL_DELTA = () => props.parameterOverrides?.scrollDelta ?? 0.2;
+    const CURSOR_EPSILON = () => props.parameterOverrides?.cursorEpsilon ?? 3;
+    const TRADITIONAL_EPSILON = () =>
       (props.parameterOverrides?.traditionalEpsilon ?? 0.8) * 100;
     const MAGNIFICATION_DEFAULT = 2;
 
@@ -1130,12 +1115,12 @@ export function Bluefish(props: BluefishProps) {
         if (isZoomed()) {
           gsap.to(svgRef, {
             attr: { viewBox: defaultViewBox() },
-            duration: GSAP_DURATION,
+            duration: GSAP_DURATION(),
           });
         } else {
           gsap.to(svgRef, {
             attr: { viewBox: magnificationViewBox() },
-            duration: GSAP_DURATION,
+            duration: GSAP_DURATION(),
           });
         }
         setIsZoomed(!isZoomed());
@@ -1162,8 +1147,8 @@ export function Bluefish(props: BluefishProps) {
           // Zoom for Lens Component
           const newMagnificationFactor =
             event.deltaY > 0
-              ? magnificationFactor() + SCROLL_DELTA
-              : Math.max(1, magnificationFactor() - SCROLL_DELTA);
+              ? magnificationFactor() + SCROLL_DELTA()
+              : Math.max(1, magnificationFactor() - SCROLL_DELTA());
           mantisContext.updateLensInfo((prevList) =>
             prevList.map((item, i) =>
               i === props.mantisId
@@ -1174,10 +1159,10 @@ export function Bluefish(props: BluefishProps) {
         } else {
           // Zoom for all other components
           if (event.deltaY > 0) {
-            setMagnificationFactor(magnificationFactor() + SCROLL_DELTA);
+            setMagnificationFactor(magnificationFactor() + SCROLL_DELTA());
           } else {
             setMagnificationFactor(
-              Math.max(1, magnificationFactor() - SCROLL_DELTA)
+              Math.max(1, magnificationFactor() - SCROLL_DELTA())
             );
           }
         }
@@ -1209,10 +1194,10 @@ export function Bluefish(props: BluefishProps) {
 
           if (prevPinchDiff > 0) {
             if (currDiff > prevPinchDiff) {
-              setMagnificationFactor(magnificationFactor() + SCROLL_DELTA);
+              setMagnificationFactor(magnificationFactor() + SCROLL_DELTA());
             } else {
               setMagnificationFactor(
-                Math.max(1, magnificationFactor() - SCROLL_DELTA)
+                Math.max(1, magnificationFactor() - SCROLL_DELTA())
               );
             }
           }
@@ -1346,7 +1331,7 @@ export function Bluefish(props: BluefishProps) {
           if (isZoomed()) {
             gsap.to(svgRef, {
               attr: { viewBox: magnificationViewBox() },
-              duration: mantisContext.isDragging() ? 0.5 : GSAP_DURATION,
+              duration: mantisContext.isDragging() ? 0.5 : GSAP_DURATION(),
             });
             mantisContext.setViewBBox(magnificationViewBox());
           } else {
@@ -1356,7 +1341,7 @@ export function Bluefish(props: BluefishProps) {
           if (isZoomed()) {
             gsap.to(svgRef, {
               attr: { viewBox: magnificationViewBox() },
-              duration: GSAP_DURATION,
+              duration: GSAP_DURATION(),
               onUpdate: updateGSAPCenter,
             });
             // TODO: Address the lag in the scroll.
@@ -1374,7 +1359,7 @@ export function Bluefish(props: BluefishProps) {
             // } else {
             //   gsap.to(svgRef, {
             //     attr: { viewBox: magnificationViewBox() },
-            //     duration: GSAP_DURATION,
+            //     duration: GSAP_DURATION(),
             //     onUpdate: updateGSAPCenter,
             //   });
             // }
@@ -1640,9 +1625,9 @@ export function Bluefish(props: BluefishProps) {
             const edgeThreshold = length / 7; // Distance from the edge of the screen to start scrolling
 
             if (mouse < min + edgeThreshold) {
-              return Math.max(min, current - TRADITIONAL_EPSILON);
+              return Math.max(min, current - TRADITIONAL_EPSILON());
             } else if (mouse > max - edgeThreshold) {
-              return Math.min(max, current + TRADITIONAL_EPSILON);
+              return Math.min(max, current + TRADITIONAL_EPSILON());
             }
             return current;
           };
@@ -1671,12 +1656,12 @@ export function Bluefish(props: BluefishProps) {
           // A more free form traversal pattern. The center of the screen just follows the mouse.
           setMagnificationCenterX((currX: number) => {
             const newX =
-              Math.abs(currX - mouseX()) > CURSOR_EPSILON ? mouseX() : currX;
+              Math.abs(currX - mouseX()) > CURSOR_EPSILON() ? mouseX() : currX;
             return Math.max(minX(), Math.min(newX, minX() + width()));
           });
           setMagnificationCenterY((currY: number) => {
             const newY =
-              Math.abs(currY - mouseY()) > CURSOR_EPSILON ? mouseY() : currY;
+              Math.abs(currY - mouseY()) > CURSOR_EPSILON() ? mouseY() : currY;
             return Math.max(minY(), Math.min(newY, minY() + height()));
           });
         }
@@ -1714,8 +1699,12 @@ export function Bluefish(props: BluefishProps) {
       ) {
         // Update the user's view box when the mini-map rectangle is dragged.
         const [vbbX, vbbY, vbbW, vbbH] = mantisContext.viewBBox().split(" ");
-        setMagnificationCenterX(parseFloat(vbbX) + parseFloat(vbbW) / 2);
-        setMagnificationCenterY(parseFloat(vbbY) + parseFloat(vbbH) / 2);
+        const newCenterX = parseFloat(vbbX) + parseFloat(vbbW) / 2;
+        const newCenterY = parseFloat(vbbY) + parseFloat(vbbH) / 2;
+        setMagnificationCenterX(newCenterX);
+        setMagnificationCenterY(newCenterY);
+        setMouseX(newCenterX);
+        setMouseY(newCenterY);
       }
     });
 
@@ -1794,7 +1783,7 @@ export function Bluefish(props: BluefishProps) {
                 ? magnificationViewBox()
                 : defaultViewBox(),
             },
-            duration: GSAP_DURATION,
+            duration: GSAP_DURATION(),
             onUpdate: updateGSAPCenter,
           });
         }
@@ -1805,14 +1794,140 @@ export function Bluefish(props: BluefishProps) {
     const OffScreenArrow = (props: {
       targetPoint: Point;
       arrowheadColor?: string;
+      arrowType?: "notch" | "enemy";
       nodeId?: string;
       onClick?: () => void;
+      straightenArrow?: boolean;
     }) => {
       // CONSTANTS
-      const mergedProps = mergeProps({ arrowheadColor: "purple" }, props);
+      const mergedProps = mergeProps(
+        { arrowheadColor: "purple", arrowType: "notch", nodeId: "" },
+        props
+      );
 
       // Calculate the direction vector from the center of the magnification view box to the `targetPoint`.
+      const vbbXMin = createMemo(() => gsapCenterX() - gsapWidth() / 2);
+      const vbbXMax = createMemo(() => gsapCenterX() + gsapWidth() / 2);
+      const vbbYMin = createMemo(() => gsapCenterY() - gsapHeight() / 2);
+      const vbbYMax = createMemo(() => gsapCenterY() + gsapHeight() / 2);
+
+      // Arrow Icons
+      const [arrowIcon, setArrowIcon] = createSignal<
+        SVGTextElement | SVGCircleElement | undefined
+      >(undefined);
+      const iconWidth = createMemo(() => {
+        const bbox = arrowIcon()?.getBBox();
+        return bbox ? bbox.width : 0;
+      });
+      const iconHeight = createMemo(() => {
+        const bbox = arrowIcon()?.getBBox();
+        return bbox ? bbox.height : 0;
+      });
+      // Queries the target node.
+      createEffect(() => {
+        if (svgRef && props.nodeId) {
+          if (getNodeType(props.nodeId) === "Text") {
+            const node = previewNodeInfo.get(props.nodeId);
+            if (node) {
+              const textLabel = svgRef.querySelector(
+                `[name="${props.nodeId}"]`
+              );
+              if (textLabel) {
+                setArrowIcon(textLabel as SVGTextElement);
+              }
+            }
+          } else if (getNodeType(props.nodeId) === "Circle") {
+            const node = previewNodeInfo.get(props.nodeId);
+            if (node) {
+              const circleNode = svgRef.querySelector(
+                `[name="${props.nodeId}"]`
+              );
+              if (circleNode) {
+                setArrowIcon(circleNode.cloneNode(false) as SVGCircleElement);
+              }
+            }
+          }
+        }
+      });
+
+      const ArrowIconElement = () => {
+        const nodeType = () => getNodeType(mergedProps.nodeId);
+
+        return (
+          <Switch fallback={<></>}>
+            <Match when={nodeType() === "Text"}>
+              <text
+                x={iconCenter().x}
+                y={iconCenter().y}
+                fill={
+                  mergedProps.arrowType === "enemy"
+                    ? mergedProps.arrowheadColor
+                    : (arrowIcon()?.getAttribute("fill") ?? "black")
+                }
+                font-size={`${
+                  (parseFloat(arrowIcon()?.getAttribute("font-size") ?? "14") /
+                    gsapMagnificationFactor()) *
+                  MAGNIFICATION_DEFAULT
+                }`}
+                font-family={
+                  arrowIcon()?.getAttribute("font-family") ??
+                  "Alegreya Sans, sans-serif"
+                }
+                font-weight={arrowIcon()?.getAttribute("font-weight") ?? "700"}
+                text-anchor="middle"
+                alignment-baseline="middle"
+                dominant-baseline="middle"
+              >
+                {arrowIcon()?.textContent}
+              </text>
+            </Match>
+            <Match when={nodeType() === "Circle"}>
+              <circle
+                cx={iconCenter().x}
+                cy={iconCenter().y}
+                r={arrowBaseWidth()}
+                fill={arrowIcon()?.getAttribute("fill") ?? "black"}
+                stroke={arrowIcon()?.getAttribute("stroke") ?? "none"}
+                stroke-width={
+                  parseFloat(arrowIcon()?.getAttribute("stroke-width") ?? "0") /
+                  gsapMagnificationFactor()
+                }
+              />
+            </Match>
+          </Switch>
+        );
+      };
+
       const directionVector = createMemo(() => {
+        if (props.straightenArrow) {
+          const nodeType = getNodeType(mergedProps.nodeId);
+          const inWidth =
+            (nodeType === "Text"
+              ? props.targetPoint.x - iconWidth()
+              : props.targetPoint.x) >= vbbXMin() &&
+            (nodeType === "Text"
+              ? props.targetPoint.x + iconWidth()
+              : props.targetPoint.x) <= vbbXMax();
+          const inHeight =
+            (nodeType === "Text"
+              ? props.targetPoint.y - iconHeight()
+              : props.targetPoint.y) >= vbbYMin() &&
+            (nodeType === "Text"
+              ? props.targetPoint.y + iconHeight()
+              : props.targetPoint.y) <= vbbYMax();
+
+          if (inWidth) {
+            return {
+              x: 0,
+              y: props.targetPoint.y - gsapCenterY(),
+            };
+          } else if (inHeight) {
+            return {
+              x: props.targetPoint.x - gsapCenterX(),
+              y: 0,
+            };
+          }
+        }
         return {
           x: props.targetPoint.x - gsapCenterX(),
           y: props.targetPoint.y - gsapCenterY(),
@@ -1866,9 +1981,31 @@ export function Bluefish(props: BluefishProps) {
           Math.abs(gsapHeight() / 2 / Math.sin(directionVectorAngle()))
         );
         const multiplier = distanceToEdge - arrowPadding();
+        const nodeType = getNodeType(mergedProps.nodeId);
+        const inWidth =
+          (nodeType === "Text"
+            ? props.targetPoint.x - iconWidth()
+            : props.targetPoint.x) >= vbbXMin() &&
+          (nodeType === "Text"
+            ? props.targetPoint.x + iconWidth()
+            : props.targetPoint.x) <= vbbXMax();
+        const inHeight =
+          (nodeType === "Text"
+            ? props.targetPoint.y - iconHeight()
+            : props.targetPoint.y) >= vbbYMin() &&
+          (nodeType === "Text"
+            ? props.targetPoint.y + iconHeight()
+            : props.targetPoint.y) <= vbbYMax();
+
         return {
-          x: gsapCenterX() + normalizedDirectionVector().x * multiplier,
-          y: gsapCenterY() + normalizedDirectionVector().y * multiplier,
+          x:
+            props.straightenArrow && inWidth
+              ? props.targetPoint.x
+              : gsapCenterX() + normalizedDirectionVector().x * multiplier,
+          y:
+            props.straightenArrow && inHeight
+              ? props.targetPoint.y
+              : gsapCenterY() + normalizedDirectionVector().y * multiplier,
         };
       });
       const notchLeft = createMemo(() => {
@@ -1883,6 +2020,12 @@ export function Bluefish(props: BluefishProps) {
             normalizedDirectionVector().y * notchDepth(),
         };
       });
+      const normLeft = createMemo(() => {
+        return {
+          x: arrowCenter().x - normalizedDirectionVector().y * arrowBaseWidth(),
+          y: arrowCenter().y + normalizedDirectionVector().x * arrowBaseWidth(),
+        };
+      });
       const notchRight = createMemo(() => {
         return {
           x:
@@ -1893,6 +2036,12 @@ export function Bluefish(props: BluefishProps) {
             arrowCenter().y -
             normalizedDirectionVector().x * arrowBaseWidth() -
             normalizedDirectionVector().y * notchDepth(),
+        };
+      });
+      const normRight = createMemo(() => {
+        return {
+          x: arrowCenter().x + normalizedDirectionVector().y * arrowBaseWidth(),
+          y: arrowCenter().y - normalizedDirectionVector().x * arrowBaseWidth(),
         };
       });
       const arrowTip = createMemo(() => {
@@ -1927,58 +2076,47 @@ export function Bluefish(props: BluefishProps) {
         });
       });
 
-      // Arrow Icons
-      const [arrowIcon, setArrowIcon] = createSignal<
-        SVGTextElement | undefined
-      >(undefined);
-      createEffect(() => {
-        if (svgRef && props.nodeId && getNodeType(props.nodeId) === "Text") {
-          const node = previewNodeInfo.get(props.nodeId);
-          if (node) {
-            const textLabel = svgRef.querySelector(`[name="${props.nodeId}"]`);
-            if (textLabel) {
-              // const clonedNode = textLabel.cloneNode(true) as SVGTextElement;
-              setArrowIcon(textLabel as SVGTextElement);
-            }
-          }
-        }
-      });
-
       return (
-        <>
-          <polygon
-            id="mantis-ui-arrow"
-            points={`${arrowTip().x},${arrowTip().y} ${notchLeft().x},${notchLeft().y} ${arrowCenter().x},${arrowCenter().y} ${notchRight().x},${notchRight().y}`}
-            fill={mergedProps.arrowheadColor}
-            stroke={"black"}
-            stroke-width={0}
-            style={{
-              filter: `drop-shadow(${0.3 / gsapMagnificationFactor()}rem ${0.3 / gsapMagnificationFactor()}rem ${0.5 / gsapMagnificationFactor()}rem rgba(0, 0, 0, 0.7))`,
-            }}
-            ref={polygonRef}
-          />
-          {arrowIcon() && (
-            <text
-              x={iconCenter().x}
-              y={iconCenter().y}
-              fill={arrowIcon()?.getAttribute("fill") ?? "black"}
-              font-size={arrowIcon()?.getAttribute("font-size") ?? "14"}
-              font-family={
-                arrowIcon()?.getAttribute("font-family") ??
-                "Alegreya Sans, sans-serif"
-              }
-              font-weight={arrowIcon()?.getAttribute("font-weight") ?? "700"}
-              text-anchor="middle"
-              alignment-baseline="middle"
-              dominant-baseline="middle"
+        <Switch>
+          <Match when={mergedProps.arrowType === "notch"}>
+            <polygon
+              id="mantis-ui-arrow"
+              points={`${arrowTip().x},${arrowTip().y} ${notchLeft().x},${notchLeft().y} ${arrowCenter().x},${arrowCenter().y} ${notchRight().x},${notchRight().y}`}
+              fill={mergedProps.arrowheadColor}
+              stroke={"black"}
+              stroke-width={0}
               style={{
-                filter: `drop-shadow(${0.1 / gsapMagnificationFactor()}rem ${0.1 / gsapMagnificationFactor()}rem ${0.2 / gsapMagnificationFactor()}rem white)`,
+                filter: `drop-shadow(${0.3 / gsapMagnificationFactor()}rem ${0.3 / gsapMagnificationFactor()}rem ${0.5 / gsapMagnificationFactor()}rem rgba(0, 0, 0, 0.7))`,
               }}
-            >
-              {arrowIcon()?.textContent}
-            </text>
-          )}
-        </>
+              ref={polygonRef}
+            />
+            {arrowIcon() && <ArrowIconElement />}
+          </Match>
+          <Match when={mergedProps.arrowType === "enemy"}>
+            <polygon
+              points={`${arrowTip().x},${arrowTip().y} ${normLeft().x},${normLeft().y} ${normRight().x},${normRight().y}`}
+              fill={mergedProps.arrowheadColor}
+              stroke={"black"}
+              stroke-width={0}
+              ref={polygonRef}
+            />
+            {arrowIcon() && (
+              <>
+                {getNodeType(mergedProps.nodeId) !== "Text" && (
+                  <rect
+                    x={iconCenter().x - arrowLength()}
+                    y={iconCenter().y - arrowLength()}
+                    width={arrowLength() * 2}
+                    height={arrowLength() * 2}
+                    fill="white"
+                    stroke={mergedProps.arrowheadColor}
+                  />
+                )}
+                <ArrowIconElement />
+              </>
+            )}
+          </Match>
+        </Switch>
       );
     };
     const ViewBoxRect = (props: {
@@ -2279,6 +2417,8 @@ export function Bluefish(props: BluefishProps) {
                       return (
                         <Show when={showArrow()}>
                           <OffScreenArrow
+                            straightenArrow
+                            arrowType="enemy"
                             targetPoint={targetPoint}
                             arrowheadColor={arrowColor()}
                             nodeId={neighborNodeId}

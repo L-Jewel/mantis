@@ -66,7 +66,7 @@ const w2jut = 10;
 
 export const Pulley = () => {
   return (
-    <Bluefish>
+    <>
       <Rect
         name="rect"
         height={20}
@@ -113,19 +113,19 @@ export const Pulley = () => {
 
       <Align alignment="center">
         <Ref select="B" />
-        <Text x={r} y={-r}>
+        <Text x={r} y={-r} name="B-text">
           B
         </Text>
       </Align>
       <Align alignment="center">
         <Ref select="A" />
-        <Text x={-r} y={-r}>
+        <Text x={-r} y={-r} name="A-text">
           A
         </Text>
       </Align>
       <Align alignment="center">
         <Ref select="C" />
-        <Text x={r} y={r}>
+        <Text x={r} y={r} name="C-text">
           C
         </Text>
       </Align>
@@ -163,7 +163,7 @@ export const Pulley = () => {
       </Align>
 
       <StackH name="w1">
-        <Weight width={30} height={30}>
+        <Weight width={30} height={30} name="w1-weight">
           W1
         </Weight>
         {/* hack to offset the centerX alignment of A and w1 */}
@@ -172,7 +172,7 @@ export const Pulley = () => {
       <StackH name="w2">
         {/* hack to offset the centerX alignment of A and w2 */}
         <Rect fill="transparent" width={r + (r / 2 - 10) - w2jut / 2} />
-        <Weight width={r * 3 + w2jut} height={30}>
+        <Weight width={r * 3 + w2jut} height={30} name="w2-weight">
           W2
         </Weight>
       </StackH>
@@ -262,6 +262,6 @@ export const Pulley = () => {
         <Ref select="C" />
         <Ref select="w2" />
       </Line>
-    </Bluefish>
+    </>
   );
 };

@@ -17,7 +17,7 @@ export { Blob } from "./blob";
 export type { BlobProps } from "./blob";
 
 export { Bluefish } from "./bluefish";
-export type { BluefishProps } from "./bluefish";
+export type { BluefishProps, MantisOverrides } from "./bluefish";
 
 export { Circle } from "./circle";
 export type { CircleProps } from "./circle";

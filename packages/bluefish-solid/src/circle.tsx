@@ -31,7 +31,7 @@ export const Circle = withBluefish(
     };
 
     const paint = (paintProps: { bbox: BBox; transform: Transform }) => {
-      const [_, rest] = splitProps(props, ["name", "cx", "cy", "r"]);
+      const [_, rest] = splitProps(props, ["cx", "cy", "r"]);
 
       const r = () => (paintProps.bbox.width ?? 0) / 2;
 
