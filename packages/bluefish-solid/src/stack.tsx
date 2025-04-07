@@ -46,6 +46,7 @@ export const Stack = withBluefish(
           transform={`translate(${paintProps.transform.translate.x ?? 0}, ${
             paintProps.transform.translate.y ?? 0
           })`}
+          id={props.name}
         >
           {paintProps.children}
         </g>

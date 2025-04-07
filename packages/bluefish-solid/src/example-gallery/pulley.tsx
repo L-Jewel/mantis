@@ -66,7 +66,7 @@ const w2jut = 10;
 
 export const Pulley = () => {
   return (
-    <>
+    <Bluefish>
       <Rect
         name="rect"
         height={20}
@@ -262,6 +262,6 @@ export const Pulley = () => {
         <Ref select="C" />
         <Ref select="w2" />
       </Line>
-    </>
+    </Bluefish>
   );
 };

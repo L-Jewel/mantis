@@ -24,7 +24,7 @@ export const StackSlot = withBluefish((props: StackSlotProps) => {
   const valueName = createName("value");
 
   return (
-    <Group>
+    <Group name={props.name}>
       <Rect name={boxName} y={0} height={40} width={40} fill={"#e2ebf6"} />
       <Text name={nameName} font-size={"24px"} font-family={fontFamily}>
         {props.variable}

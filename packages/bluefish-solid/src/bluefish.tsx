@@ -591,23 +591,33 @@ export function Bluefish(props: BluefishProps) {
   /**
    * Determines if two SVG view boxes overlap.
    *
-   * @param viewBox1 - The first viewBox as a string in the format "x y width height".
-   * @param viewBox2 - The second viewBox as a string in the format "x y width height".
-   * @returns A boolean indicating whether the two viewBoxes overlap.
+   * @param viewBox1 - The first view box as a string in the format "x y width height".
+   * @param viewBox2 - The second view box as a string in the format "x y width height".
+   * @param percentVisible - A number between 0 and 1 representing the minimum percentage of overlap
+   *                         required for the view boxes to be considered overlapping. Defaults to 0.
+   * @returns A boolean indicating whether the two view boxes overlap by at least the specified percentage.
+   *
+   * The function calculates the overlapping area between the two view boxes and compares it to the
+   * area of the smaller view box. If the overlapping area divided by the smaller view box's area
+   * exceeds the `percentVisible` threshold, the function returns `true`.
    */
   function viewBoxOverlaps(
     viewBox1: string,
     viewBox2: string,
-    padding: number = 0
+    percentVisible: number = 0
   ): boolean {
     const [x1, y1, w1, h1] = viewBox1.split(" ").map(Number);
     const [x2, y2, w2, h2] = viewBox2.split(" ").map(Number);
-    return !(
-      x1 + w1 - padding < x2 ||
-      x2 + w2 - padding < x1 ||
-      y1 + h1 - padding < y2 ||
-      y2 + h2 - padding < y1
-    );
+
+    const overlapX = Math.max(0, Math.min(x1 + w1, x2 + w2) - Math.max(x1, x2));
+    const overlapY = Math.max(0, Math.min(y1 + h1, y2 + h2) - Math.max(y1, y2));
+    const overlapArea = overlapX * overlapY;
+
+    const area1 = w1 * h1;
+    const area2 = w2 * h2;
+    const smallestArea = Math.min(area1, area2);
+
+    return overlapArea / smallestArea > percentVisible;
   }
   /**
    * Determines if a point is within a given view box.
@@ -1087,25 +1097,6 @@ export function Bluefish(props: BluefishProps) {
         minX() + width(),
         minY() + height(),
       ]);
-
-    // TODO: Potential styling to help with split screen?
-    // onMount(() => {
-    //   if (
-    //     isAMTraversalType(props.mantisComponentType) ||
-    //     props.mantisComponentType === MantisComponentType.SSLeft
-    //   ) {
-    //     if (svgRef) {
-    //       svgRef.style.border = ".2rem solid orangered";
-    //     }
-    //   } else if (
-    //     isAMAutoType(props.mantisComponentType) ||
-    //     props.mantisComponentType === MantisComponentType.SSRight
-    //   ) {
-    //     if (svgRef) {
-    //       svgRef.style.border = ".2rem solid blue";
-    //     }
-    //   }
-    // });
 
     // VISUAL LOGIC
     // Handles zoom-related functionalities
@@ -1798,6 +1789,7 @@ export function Bluefish(props: BluefishProps) {
       nodeId?: string;
       onClick?: () => void;
       straightenArrow?: boolean;
+      hideIcon?: boolean;
     }) => {
       // CONSTANTS
       const mergedProps = mergeProps(
@@ -1813,8 +1805,13 @@ export function Bluefish(props: BluefishProps) {
 
       // Arrow Icons
       const [arrowIcon, setArrowIcon] = createSignal<
-        SVGTextElement | SVGCircleElement | undefined
+        SVGTextElement | SVGCircleElement | SVGGraphicsElement | undefined
       >(undefined);
+      const [iconNodeId, setIconNodeId] = createSignal<string>("");
+
+      const iconDims = createMemo(() => {
+        return getBbox(iconNodeId());
+      });
       const iconWidth = createMemo(() => {
         const bbox = arrowIcon()?.getBBox();
         return bbox ? bbox.width : 0;
@@ -1826,7 +1823,8 @@ export function Bluefish(props: BluefishProps) {
       // Queries the target node.
       createEffect(() => {
         if (svgRef && props.nodeId) {
-          if (getNodeType(props.nodeId) === "Text") {
+          const currNodeType = getNodeType(props.nodeId);
+          if (currNodeType === "Text") {
             const node = previewNodeInfo.get(props.nodeId);
             if (node) {
               const textLabel = svgRef.querySelector(
@@ -1834,9 +1832,10 @@ export function Bluefish(props: BluefishProps) {
               );
               if (textLabel) {
                 setArrowIcon(textLabel as SVGTextElement);
+                setIconNodeId(props.nodeId);
               }
             }
-          } else if (getNodeType(props.nodeId) === "Circle") {
+          } else if (currNodeType === "Circle") {
             const node = previewNodeInfo.get(props.nodeId);
             if (node) {
               const circleNode = svgRef.querySelector(
@@ -1844,6 +1843,43 @@ export function Bluefish(props: BluefishProps) {
               );
               if (circleNode) {
                 setArrowIcon(circleNode.cloneNode(false) as SVGCircleElement);
+                setIconNodeId(props.nodeId);
+              }
+            }
+          } else {
+            const node = previewNodeInfo.get(props.nodeId);
+            if (node) {
+              const findAndCloneNode = (selector: string) => {
+                const element = svgRef.querySelector(selector);
+                if (element) {
+                  const clonedElement = element.cloneNode(
+                    true
+                  ) as SVGGraphicsElement;
+                  clonedElement.removeAttribute("transform");
+                  return clonedElement;
+                }
+                return null;
+              };
+
+              const clonedNode =
+                findAndCloneNode(`[name="${props.nodeId}"]`) ||
+                findAndCloneNode(`[id="${props.nodeId}"]`);
+
+              if (clonedNode) {
+                setArrowIcon(clonedNode);
+                setIconNodeId(props.nodeId);
+                return;
+              }
+
+              const parentNodeId = scenegraph[props.nodeId]?.parent;
+              if (parentNodeId) {
+                const clonedParentNode = findAndCloneNode(
+                  `[id="${parentNodeId}"]`
+                );
+                if (clonedParentNode) {
+                  setArrowIcon(clonedParentNode);
+                  setIconNodeId(parentNodeId);
+                }
               }
             }
           }
@@ -1854,7 +1890,31 @@ export function Bluefish(props: BluefishProps) {
         const nodeType = () => getNodeType(mergedProps.nodeId);
 
         return (
-          <Switch fallback={<></>}>
+          <Switch
+            fallback={
+              <>
+                <g
+                  transform={`translate(${iconCenter().x - (iconDims().width ?? iconWidth()) / 2 / gsapMagnificationFactor()}, ${
+                    iconCenter().y -
+                    (iconDims().height ?? iconHeight()) /
+                      2 /
+                      gsapMagnificationFactor()
+                  }) scale(${1 / gsapMagnificationFactor()})`}
+                >
+                  <rect
+                    x={0}
+                    y={0}
+                    width={iconDims().width ?? 0}
+                    height={iconDims().height ?? 0}
+                    fill="white"
+                    stroke={mergedProps.arrowheadColor}
+                    stroke-width={1 / gsapMagnificationFactor()}
+                  />
+                  {arrowIcon()}
+                </g>
+              </>
+            }
+          >
             <Match when={nodeType() === "Text"}>
               <text
                 x={iconCenter().x}
@@ -1865,9 +1925,10 @@ export function Bluefish(props: BluefishProps) {
                     : (arrowIcon()?.getAttribute("fill") ?? "black")
                 }
                 font-size={`${
-                  (parseFloat(arrowIcon()?.getAttribute("font-size") ?? "14") /
-                    gsapMagnificationFactor()) *
-                  MAGNIFICATION_DEFAULT
+                  (parseFloat(arrowIcon()?.getAttribute("font-size") ?? "14") *
+                    MAGNIFICATION_DEFAULT *
+                    1.5) /
+                  gsapMagnificationFactor()
                 }`}
                 font-family={
                   arrowIcon()?.getAttribute("font-family") ??
@@ -2051,9 +2112,50 @@ export function Bluefish(props: BluefishProps) {
         };
       });
       const iconCenter = createMemo(() => {
+        const adjustment = {
+          x: 0,
+          y: 0,
+        };
+
+        if (
+          directionVectorAngle() > Math.PI / 4 &&
+          directionVectorAngle() < (3 * Math.PI) / 4
+        ) {
+          // Arrow is pointing up
+          adjustment.y = iconDims().height ?? 0;
+        } else if (
+          directionVectorAngle() > (5 * Math.PI) / 4 &&
+          directionVectorAngle() < (7 * Math.PI) / 4
+        ) {
+          // Arrow is pointing down
+          adjustment.y = -(iconDims().height ?? 0);
+        } else if (
+          directionVectorAngle() <= Math.PI / 4 ||
+          directionVectorAngle() >= (7 * Math.PI) / 4
+        ) {
+          // Arrow is pointing right
+          adjustment.x = iconDims().width ?? 0;
+        } else if (
+          directionVectorAngle() >= (3 * Math.PI) / 4 &&
+          directionVectorAngle() <= (5 * Math.PI) / 4
+        ) {
+          // Arrow is pointing left
+          adjustment.x = -(iconDims().width ?? 0);
+        }
+
         return {
-          x: arrowCenter().x - normalizedDirectionVector().x * arrowLength(),
-          y: arrowCenter().y - normalizedDirectionVector().y * arrowLength(),
+          x:
+            arrowCenter().x -
+            (mergedProps.arrowType === "enemy"
+              ? 0
+              : normalizedDirectionVector().x * arrowLength() * 0.75) -
+            adjustment.x / 2 / gsapMagnificationFactor(),
+          y:
+            arrowCenter().y -
+            (mergedProps.arrowType === "enemy"
+              ? 0
+              : normalizedDirectionVector().y * arrowLength() * 0.75) -
+            adjustment.y / 2 / gsapMagnificationFactor(),
         };
       });
 
@@ -2090,7 +2192,7 @@ export function Bluefish(props: BluefishProps) {
               }}
               ref={polygonRef}
             />
-            {arrowIcon() && <ArrowIconElement />}
+            {!props.hideIcon && arrowIcon() && <ArrowIconElement />}
           </Match>
           <Match when={mergedProps.arrowType === "enemy"}>
             <polygon
@@ -2100,21 +2202,7 @@ export function Bluefish(props: BluefishProps) {
               stroke-width={0}
               ref={polygonRef}
             />
-            {arrowIcon() && (
-              <>
-                {getNodeType(mergedProps.nodeId) !== "Text" && (
-                  <rect
-                    x={iconCenter().x - arrowLength()}
-                    y={iconCenter().y - arrowLength()}
-                    width={arrowLength() * 2}
-                    height={arrowLength() * 2}
-                    fill="white"
-                    stroke={mergedProps.arrowheadColor}
-                  />
-                )}
-                <ArrowIconElement />
-              </>
-            )}
+            {!props.hideIcon && arrowIcon() && <ArrowIconElement />}
           </Match>
         </Switch>
       );
@@ -2391,23 +2479,29 @@ export function Bluefish(props: BluefishProps) {
                       const neighborBbox = getBbox(neighborNodeId);
                       const neighborXY =
                         calculateTransformedBboxXY(neighborNodeId);
+                      const isConnector = () =>
+                        getNodeType(neighborNodeId) === "Arrow" ||
+                        getNodeType(neighborNodeId) === "Line";
                       const showArrow = () =>
                         isZoomed() &&
                         !viewBoxOverlaps(
                           `${magnificationX()} ${magnificationY()} ${actualWidth() / magnificationFactor()} ${actualHeight() / magnificationFactor()}`,
                           `${neighborXY.x} ${neighborXY.y} ${neighborBbox.width} ${neighborBbox.height}`,
-                          Math.min(actualWidth(), actualHeight()) /
-                            magnificationFactor() /
-                            10
+                          0.2
                         );
+
                       // Determine the color of the arrow (orange if related, purple if not)
 
-                      const arrowColor = () =>
-                        relatedNodes().includes(
-                          scopeMap.getKey(neighborNodeId) ?? ""
+                      const arrowColor = () => {
+                        if (isConnector()) return "blue";
+                        if (
+                          relatedNodes().includes(
+                            scopeMap.getKey(neighborNodeId) ?? ""
+                          )
                         )
-                          ? "orangered"
-                          : "purple";
+                          return "orangered";
+                        return "purple";
+                      };
 
                       const targetPoint = {
                         x: neighborNodeMidpoint().cx,
@@ -2418,7 +2512,7 @@ export function Bluefish(props: BluefishProps) {
                         <Show when={showArrow()}>
                           <OffScreenArrow
                             straightenArrow
-                            arrowType="enemy"
+                            hideIcon={isConnector()}
                             targetPoint={targetPoint}
                             arrowheadColor={arrowColor()}
                             nodeId={neighborNodeId}
