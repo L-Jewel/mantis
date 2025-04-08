@@ -18,12 +18,15 @@ export enum MantisComponentType {
   AMPulleyAuto,
   AMPyTutorTraversal,
   AMPyTutorAuto,
+  AMNetworkMapTraversal,
+  AMNetworkMapAuto,
   LMain,
   LLens,
   Basic,
   PreviewPlanets,
   PreviewPythonTutor,
   PreviewPulley,
+  PreviewNetworkMap,
 }
 export enum MantisTraversalPattern {
   Bubble,
@@ -48,7 +51,8 @@ export function isAMAutoType(type: MantisComponentType | undefined) {
   return (
     type === MantisComponentType.AMPlanetsAuto ||
     type === MantisComponentType.AMPyTutorAuto ||
-    type === MantisComponentType.AMPulleyAuto
+    type === MantisComponentType.AMPulleyAuto ||
+    type === MantisComponentType.AMNetworkMapAuto
   );
 }
 /**
@@ -59,7 +63,8 @@ export function isAMTraversalType(type: MantisComponentType | undefined) {
   return (
     type === MantisComponentType.AMPlanetsTraversal ||
     type === MantisComponentType.AMPyTutorTraversal ||
-    type === MantisComponentType.AMPulleyTraversal
+    type === MantisComponentType.AMPulleyTraversal ||
+    type === MantisComponentType.AMNetworkMapTraversal
   );
 }
 /**
@@ -70,7 +75,8 @@ export function isPreviewType(type: MantisComponentType | undefined) {
   return (
     type === MantisComponentType.PreviewPlanets ||
     type === MantisComponentType.PreviewPythonTutor ||
-    type === MantisComponentType.PreviewPulley
+    type === MantisComponentType.PreviewPulley ||
+    type === MantisComponentType.PreviewNetworkMap
   );
 }
 /**

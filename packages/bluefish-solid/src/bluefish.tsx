@@ -188,6 +188,109 @@ const getNodeRelations = (
         ["t6", ["l6"]],
       ]);
     }
+    case MantisComponentType.AMNetworkMapTraversal:
+    case MantisComponentType.PreviewNetworkMap: {
+      return new Map<string, string[]>([
+        ["isp-1", ["wan-router-1"]],
+        ["isp-2", ["wan-router-2"]],
+        [
+          "wan-router-1",
+          ["isp-1", "cisco-asa-1", "wan-router-2", "cisco-asa-2"],
+        ],
+        [
+          "wan-router-2",
+          ["isp-2", "cisco-asa-1", "wan-router-1", "cisco-asa-2"],
+        ],
+        [
+          "cisco-asa-1",
+          [
+            "wan-router-1",
+            "wan-router-2",
+            "cisco-asa-2",
+            "cisco-4500-01",
+            "cisco-4500-02",
+            "cisco-3758",
+            "cisco-3759",
+            "fallover-link-label",
+          ],
+        ],
+        [
+          "cisco-asa-2",
+          [
+            "wan-router-1",
+            "wan-router-2",
+            "cisco-asa-1",
+            "cisco-4500-01",
+            "cisco-4500-02",
+            "cisco-3758",
+            "cisco-3759",
+            "fallover-link-label",
+          ],
+        ],
+        [
+          "cisco-4500-01",
+          [
+            "cisco-asa-1",
+            "cisco-asa-2",
+            "int-dns-1",
+            "int-dns-2",
+            "db-server-1",
+            "db-server-2",
+          ],
+        ],
+        [
+          "cisco-4500-02",
+          [
+            "cisco-asa-1",
+            "cisco-asa-2",
+            "int-dns-1",
+            "int-dns-2",
+            "db-server-1",
+            "db-server-2",
+          ],
+        ],
+        ["int-dns-1", ["cisco-4500-01", "cisco-4500-02"]],
+        ["int-dns-2", ["cisco-4500-01", "cisco-4500-02"]],
+        ["db-server-1", ["cisco-4500-01", "cisco-4500-02", "db-server-2"]],
+        ["db-server-2", ["cisco-4500-01", "cisco-4500-02", "db-server-1"]],
+        [
+          "cisco-3758",
+          [
+            "cisco-asa-1",
+            "cisco-asa-2",
+            "css-switch-1",
+            "css-switch-2",
+            "cisco-3759",
+            "dmz-dns-server-1",
+            "dmz-dns-server-2",
+          ],
+        ],
+        [
+          "cisco-3759",
+          [
+            "cisco-asa-1",
+            "cisco-asa-2",
+            "css-switch-1",
+            "css-switch-2",
+            "cisco-3758",
+            "dmz-dns-server-1",
+            "dmz-dns-server-2",
+          ],
+        ],
+        [
+          "css-switch-1",
+          ["cisco-3758", "cisco-3759", "web-server-1", "web-server-2"],
+        ],
+        [
+          "css-switch-2",
+          ["cisco-3758", "cisco-3759", "web-server-1", "web-server-2"],
+        ],
+        ["dmz-dns-server-1", ["cisco-3758", "cisco-3759"]],
+        ["dmz-dns-server-2", ["cisco-3758", "cisco-3759"]],
+        ["web-server-1", ["css-switch-1", "css-switch-2"]],
+        ["web-server-2", ["css-switch-1", "css-switch-2"]],
+      ]);
+    }
     default: {
       return new Map<string, string[]>([]);
     }
@@ -249,6 +352,36 @@ const getPreviewNodes = (
         "rect",
       ]);
     }
+    case MantisComponentType.AMNetworkMapTraversal:
+    case MantisComponentType.PreviewNetworkMap: {
+      return new Set([
+        "isp-1",
+        "isp-2",
+        "wan-router-1",
+        "wan-router-2",
+        "external-net-seg-label",
+        "cisco-asa-1",
+        "cisco-asa-2",
+        "fallover-link-line",
+        "fallover-link-label",
+        "cisco-4500-01",
+        "cisco-4500-02",
+        "internal-net-seg-label",
+        "int-dns-1",
+        "int-dns-2",
+        "db-server-1",
+        "db-server-2",
+        "cisco-3758",
+        "cisco-3759",
+        "css-switch-1",
+        "css-switch-2",
+        "dmz-dns-server-1",
+        "dmz-dns-server-2",
+        "web-server-1",
+        "web-server-2",
+        "dmz-net-seg-label",
+      ]);
+    }
     default: {
       return new Set([]);
     }
@@ -293,6 +426,36 @@ const getIndicatorNodes = (
         "A",
         "B",
         "C",
+      ]);
+    }
+    case MantisComponentType.AMNetworkMapTraversal:
+    case MantisComponentType.PreviewNetworkMap: {
+      return new Set([
+        "isp-1",
+        "isp-2",
+        "wan-router-1",
+        "wan-router-2",
+        "external-net-seg-label",
+        "cisco-asa-1",
+        "cisco-asa-2",
+        "fallover-link-line",
+        "fallover-link-label",
+        "cisco-4500-01",
+        "cisco-4500-02",
+        "internal-net-seg-label",
+        "int-dns-1",
+        "int-dns-2",
+        "db-server-1",
+        "db-server-2",
+        "cisco-3758",
+        "cisco-3759",
+        "css-switch-1",
+        "css-switch-2",
+        "dmz-dns-server-1",
+        "dmz-dns-server-2",
+        "web-server-1",
+        "web-server-2",
+        "dmz-net-seg-label",
       ]);
     }
     default: {
@@ -1910,7 +2073,11 @@ export function Bluefish(props: BluefishProps) {
                     stroke={mergedProps.arrowheadColor}
                     stroke-width={1 / gsapMagnificationFactor()}
                   />
-                  {arrowIcon()}
+                  <g
+                    transform={`translate(${-(iconDims().left ?? 0)}, ${-(iconDims().top ?? 0)})`}
+                  >
+                    {arrowIcon()}
+                  </g>
                 </g>
               </>
             }

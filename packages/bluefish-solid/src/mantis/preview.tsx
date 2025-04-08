@@ -9,7 +9,7 @@ import {
 export const Preview = (
   props: ParentProps & {
     traversalPattern?: MantisTraversalPattern;
-    diagram: "Planets" | "Python-Tutor" | "Pulley";
+    diagram: "Planets" | "Python-Tutor" | "Pulley" | "Network-Map";
     showVoronoi?: boolean;
     showHighlighting?: boolean;
     parameterOverrides?: MantisOverrides;
@@ -23,6 +23,8 @@ export const Preview = (
         return MantisComponentType.PreviewPythonTutor;
       case "Pulley":
         return MantisComponentType.PreviewPulley;
+      case "Network-Map":
+        return MantisComponentType.PreviewNetworkMap;
     }
   };
 
