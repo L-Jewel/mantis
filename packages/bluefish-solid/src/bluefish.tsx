@@ -44,6 +44,8 @@ import {
   isAMAutoType,
   isAMTraversalType,
   isAutoMapContext,
+  isDLMainType,
+  isDockedLensContext,
   isDraggableType,
   isMiniMapContext,
   isMultiLensContext,
@@ -304,10 +306,12 @@ const getPreviewNodes = (
   type: MantisComponentType | undefined
 ): Set<string> => {
   switch (type) {
+    case MantisComponentType.DLPlanets:
     case MantisComponentType.AMPlanetsTraversal:
     case MantisComponentType.PreviewPlanets: {
       return new Set(["mercury", "venus", "earth", "mars", "label", "arrow"]);
     }
+    case MantisComponentType.DLPythonTutor:
     case MantisComponentType.AMPyTutorTraversal:
     case MantisComponentType.PreviewPythonTutor: {
       return new Set([
@@ -328,6 +332,7 @@ const getPreviewNodes = (
         "stackSlot-2",
       ]);
     }
+    case MantisComponentType.DLPulley:
     case MantisComponentType.AMPulleyTraversal:
     case MantisComponentType.PreviewPulley: {
       return new Set([
@@ -352,6 +357,7 @@ const getPreviewNodes = (
         "rect",
       ]);
     }
+    case MantisComponentType.DLNetworkMap:
     case MantisComponentType.AMNetworkMapTraversal:
     case MantisComponentType.PreviewNetworkMap: {
       return new Set([
@@ -912,7 +918,8 @@ export function Bluefish(props: BluefishProps) {
   createEffect(() => {
     if (
       isPreviewType(props.mantisComponentType) ||
-      isAMTraversalType(props.mantisComponentType)
+      isAMTraversalType(props.mantisComponentType) ||
+      isDLMainType(props.mantisComponentType)
     ) {
       const newBubbleMidpoints: NodeInfo[] = [];
       const newPreviewMidpoints: NodeInfo[] = [];
@@ -1334,6 +1341,7 @@ export function Bluefish(props: BluefishProps) {
       if (
         elementUnderMouse &&
         (isZoomed() ||
+          isDLMainType(props.mantisComponentType) ||
           props.mantisComponentType === MantisComponentType.LLens) &&
         svgRef &&
         svgRef.contains(elementUnderMouse)
@@ -1355,6 +1363,18 @@ export function Bluefish(props: BluefishProps) {
                 : item
             )
           );
+        } else if (isDLMainType(props.mantisComponentType)) {
+          // Zoom for DLMain Component
+          const newMagnificationFactor =
+            event.deltaY > 0
+              ? magnificationFactor() + SCROLL_DELTA()
+              : Math.max(1, magnificationFactor() - SCROLL_DELTA());
+          setMagnificationFactor(newMagnificationFactor);
+          if (!isZoomed()) {
+            setMagnificationCenterX((minX() + width()) / 2);
+            setMagnificationCenterY((minY() + height()) / 2);
+            setIsZoomed(true);
+          }
         } else {
           // Zoom for all other components
           if (event.deltaY > 0) {
@@ -1586,12 +1606,43 @@ export function Bluefish(props: BluefishProps) {
      * main SVG.
      */
     function handleKeyPress(event: KeyboardEvent) {
-      if (isTraversalType(props.mantisComponentType) && elementActive()) {
+      if (
+        (isTraversalType(props.mantisComponentType) ||
+          isDLMainType(props.mantisComponentType)) &&
+        elementActive()
+      ) {
         if (event.key === "f") setMouseActive(!mouseActive());
-        else if (event.shiftKey && event.key === "ArrowUp" && isZoomed()) {
-          setMagnificationFactor((prev) => Math.floor(prev) + 1);
-        } else if (event.shiftKey && event.key === "ArrowDown" && isZoomed()) {
-          setMagnificationFactor((prev) => Math.max(1, Math.ceil(prev) - 1));
+        else if (event.shiftKey && event.key === "ArrowUp") {
+          event.preventDefault();
+          if (isDockedLensContext(mantisContext)) {
+            mantisContext.setDockedLensZoom((prev) => Math.floor(prev) + 1);
+          } else if (isZoomed()) {
+            setMagnificationFactor((prev) => Math.floor(prev) + 1);
+          }
+        } else if (event.shiftKey && event.key === "ArrowDown") {
+          event.preventDefault();
+          if (isDockedLensContext(mantisContext)) {
+            mantisContext.setDockedLensZoom((prev) => Math.ceil(prev) - 1);
+          } else if (isZoomed()) {
+            setMagnificationFactor((prev) => Math.max(1, Math.ceil(prev) - 1));
+          }
+        }
+        // Allows users to pan the Docked Lens main component.
+        if (isDLMainType(props.mantisComponentType)) {
+          switch (event.key) {
+            case "ArrowUp":
+              setMagnificationCenterY((prev) => prev - height() / 10);
+              break;
+            case "ArrowDown":
+              setMagnificationCenterY((prev) => prev + height() / 10);
+              break;
+            case "ArrowLeft":
+              setMagnificationCenterX((prev) => prev - width() / 10);
+              break;
+            case "ArrowRight":
+              setMagnificationCenterX((prev) => prev + width() / 10);
+              break;
+          }
         }
         // Allows for users to cycle through the auto-focus of the Auto Map.
         if (
@@ -1700,6 +1751,8 @@ export function Bluefish(props: BluefishProps) {
             },
             false
           );
+        } else if (isDLMainType(props.mantisComponentType)) {
+          svgRef.addEventListener("wheel", handleScroll, false);
         }
       }
 
@@ -1762,6 +1815,8 @@ export function Bluefish(props: BluefishProps) {
               },
               false
             );
+          } else if (isDLMainType(props.mantisComponentType)) {
+            svgRef.removeEventListener("wheel", handleScroll, false);
           }
         }
       });
@@ -1962,7 +2017,7 @@ export function Bluefish(props: BluefishProps) {
       setMagnificationFactor(Math.max(1, zoomFactor * 0.9));
     }
 
-    // Auto-Map Logic
+    // Auto-Map Traversal/Visual Logic
     const [autoMapIndex, setAutoMapIndex] = createSignal(0);
     createEffect(() => {
       if (isAutoMapContext(mantisContext)) {
@@ -2014,6 +2069,82 @@ export function Bluefish(props: BluefishProps) {
             );
             zoomToBBox(allVBBBox);
           }
+          gsap.to(svgRef, {
+            attr: {
+              viewBox: magnificationViewBox(),
+            },
+            duration: GSAP_DURATION(),
+            onUpdate: updateGSAPCenter,
+          });
+        }
+      }
+    });
+
+    // DOCKED LENS LOGIC
+    function updateMouseCenter() {
+      const newMouseCoords = getMousePositionSVG({
+        x: clientX(),
+        y: clientY(),
+      });
+      if (!newMouseCoords) return;
+      setMouseX(newMouseCoords.x);
+      setMouseY(newMouseCoords.y);
+    }
+    createEffect(() => {
+      if (isDockedLensContext(mantisContext)) {
+        if (isDLMainType(props.mantisComponentType) && svgRef) {
+          if (props.mantisComponentType !== MantisComponentType.DLMain) {
+            // Finds the preview node closest to the cursor.
+            const closestPointPreview = previewDelaunay().find(
+              mouseX(),
+              mouseY()
+            );
+            if (isNaN(closestPointPreview)) return;
+            setPreviewNodeId(
+              resolveNode(previewNodeData()[closestPointPreview].nodeId)
+            );
+
+            mantisContext.setMouseCenter({
+              x: prevNodeCenterX(),
+              y: prevNodeCenterY(),
+            });
+          } else if (
+            props.mantisTraversalPattern === MantisTraversalPattern.Bubble
+          ) {
+            // Finds the node closest to the cursor.
+            const closestPointBubble = bubbleDelaunay().find(
+              mouseX(),
+              mouseY()
+            );
+            if (isNaN(closestPointBubble)) return;
+            setCurrentNodeId(
+              resolveNode(bubbleNodeData()[closestPointBubble].nodeId)
+            );
+
+            mantisContext.setMouseCenter({
+              x: selNodeCenterX(),
+              y: selNodeCenterY(),
+            });
+          } else {
+            mantisContext.setMouseCenter({ x: mouseX(), y: mouseY() });
+          }
+          gsap.to(svgRef, {
+            attr: {
+              viewBox: isZoomed() ? magnificationViewBox() : defaultViewBox(),
+            },
+            duration: GSAP_DURATION(),
+            onUpdate: updateGSAPCenter,
+            onComplete: updateMouseCenter,
+          });
+        } else if (
+          props.mantisComponentType === MantisComponentType.DLLens &&
+          svgRef
+        ) {
+          const { x, y } = mantisContext.mouseCenter();
+          setMagnificationCenterX(x);
+          setMagnificationCenterY(y);
+          setMagnificationFactor(mantisContext.dockedLensZoom());
+
           gsap.to(svgRef, {
             attr: {
               viewBox: magnificationViewBox(),
@@ -2896,14 +3027,15 @@ export function Bluefish(props: BluefishProps) {
                 </>
               ))}
             {/* Cursor Position */}
-            {!isAMAutoType(props.mantisComponentType) && (
-              <circle
-                cx={mouseX()}
-                cy={mouseY()}
-                r={3}
-                fill={getCursorColor()}
-              />
-            )}
+            {!isAMAutoType(props.mantisComponentType) &&
+              props.mantisComponentType !== MantisComponentType.DLLens && (
+                <circle
+                  cx={mouseX()}
+                  cy={mouseY()}
+                  r={3}
+                  fill={getCursorColor()}
+                />
+              )}
           </>
         )}
       </svg>

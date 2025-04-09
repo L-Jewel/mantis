@@ -27,6 +27,12 @@ export enum MantisComponentType {
   PreviewPythonTutor,
   PreviewPulley,
   PreviewNetworkMap,
+  DLMain,
+  DLPlanets,
+  DLPythonTutor,
+  DLPulley,
+  DLNetworkMap,
+  DLLens,
 }
 export enum MantisTraversalPattern {
   Bubble,
@@ -65,6 +71,15 @@ export function isAMTraversalType(type: MantisComponentType | undefined) {
     type === MantisComponentType.AMPyTutorTraversal ||
     type === MantisComponentType.AMPulleyTraversal ||
     type === MantisComponentType.AMNetworkMapTraversal
+  );
+}
+export function isDLMainType(type: MantisComponentType | undefined) {
+  return (
+    type === MantisComponentType.DLMain ||
+    type === MantisComponentType.DLNetworkMap ||
+    type === MantisComponentType.DLPulley ||
+    type === MantisComponentType.DLPythonTutor ||
+    type === MantisComponentType.DLPlanets
   );
 }
 /**
@@ -112,6 +127,9 @@ export function isMultiLensContext(context: MantisState | undefined) {
 export function isAutoMapContext(context: MantisState | undefined) {
   return context?.type === "AM";
 }
+export function isDockedLensContext(context: MantisState | undefined) {
+  return context?.type === "DL";
+}
 
 export type LLensInfo = { x: number; y: number; magnification: number };
 export type MantisState =
@@ -148,12 +166,21 @@ export type MantisState =
       setIsAutoZoomed: Setter<boolean>;
       allViewBoxes: Accessor<string[]>;
       setAllViewBoxes: Setter<string[]>;
+    }
+  | {
+      type: "DL";
+      mouseCenter: Accessor<{ x: number; y: number }>;
+      setMouseCenter: Setter<{ x: number; y: number }>;
+      dockedLensZoom: Accessor<number>;
+      setDockedLensZoom: Setter<number>;
     };
 
 const MantisContext = createContext<MantisState>();
 
 export const MantisProvider = (
-  props: ParentProps & { providerType: "MM" | "SS" | "L" | "P" | "B" | "AM" }
+  props: ParentProps & {
+    providerType: "MM" | "SS" | "L" | "P" | "B" | "AM" | "DL";
+  }
 ) => {
   let providerState: MantisState | undefined;
 
@@ -212,6 +239,18 @@ export const MantisProvider = (
       setIsAutoZoomed,
       allViewBoxes,
       setAllViewBoxes,
+    };
+  } else if (props.providerType === "DL") {
+    // DOCKED LENS
+    const [mouseCenter, setMouseCenter] = createSignal({ x: 0, y: 0 });
+    const [dockedLensZoom, setDockedLensZoom] = createSignal(2);
+
+    providerState = {
+      type: "DL",
+      mouseCenter,
+      setMouseCenter,
+      dockedLensZoom,
+      setDockedLensZoom,
     };
   }
 
