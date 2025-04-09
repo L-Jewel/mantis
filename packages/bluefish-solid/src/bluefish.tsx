@@ -1568,6 +1568,9 @@ export function Bluefish(props: BluefishProps) {
     });
 
     // Fixed Positioning (Multi-Lens Lens Component)
+    const [lensShape, setLensShape] = createSignal<"circle" | "rectangle">(
+      "rectangle"
+    );
     createEffect(() => {
       if (props.mantisComponentType === MantisComponentType.LLens) {
         zoomAroundPoint({ x: rectX(), y: rectY() }, magnificationFactor());
@@ -1630,10 +1633,12 @@ export function Bluefish(props: BluefishProps) {
         }
       } else if (
         elementActive() &&
-        props.mantisComponentType === MantisComponentType.LLens &&
-        event.key === "r"
+        props.mantisComponentType === MantisComponentType.LLens
       ) {
-        setMagnificationFactor(MAGNIFICATION_DEFAULT);
+        // TODO - Resetting the zoom of a Lens doesn't work.
+        if (event.key === "z") setMagnificationFactor(MAGNIFICATION_DEFAULT);
+        else if (event.key === "c") setLensShape("circle");
+        else if (event.key === "r") setLensShape("rectangle");
       }
     }
     createEffect(() => {
@@ -1916,6 +1921,7 @@ export function Bluefish(props: BluefishProps) {
         .filter((nodeId) => nodeId !== undefined);
       return [previewNodeId(), ...relatedNodeIds];
     };
+    // Auto-Map Helper Functions
     /**
      * Updates the magnification view box to zoom in on a given bounding box (bbox).
      * Maintains the aspect ratio of the view box.
@@ -1956,6 +1962,7 @@ export function Bluefish(props: BluefishProps) {
       setMagnificationFactor(Math.max(1, zoomFactor * 0.9));
     }
 
+    // Auto-Map Logic
     const [autoMapIndex, setAutoMapIndex] = createSignal(0);
     createEffect(() => {
       if (isAutoMapContext(mantisContext)) {
@@ -2489,7 +2496,12 @@ export function Bluefish(props: BluefishProps) {
       );
     };
     const LensClipPath = (
-      props: ParentProps & { id: number; lensInfo: LLensInfo; snap?: boolean }
+      props: ParentProps & {
+        id: number;
+        lensInfo: LLensInfo;
+        snap?: boolean;
+        shape?: "circle" | "rectangle";
+      }
     ) => {
       const STROKE_WIDTH_VAL = 8;
       const [lensScale, setLensScale] = createSignal(2);
@@ -2497,11 +2509,20 @@ export function Bluefish(props: BluefishProps) {
         Math.min(actualWidth(), actualHeight()) /
         magnificationFactor() /
         lensScale();
+      const LENS_WIDTH = () =>
+        (Math.min(actualWidth(), actualHeight()) /
+          magnificationFactor() /
+          lensScale()) *
+        2;
+      const LENS_HEIGHT = () =>
+        (Math.min(actualWidth(), actualHeight()) /
+          magnificationFactor() /
+          (lensScale() * 1.5)) *
+        2;
       const lensID = () => `lensClip-${props.id}`;
 
       // On mount, set the initial conditions of the lens component.
       createEffect(() => {
-        // TODO - Something weird happens to the lenses on save.
         if (!isDragging()) {
           // If snapping is enabled, the lens snaps to the nearest node when it's not being dragged.
           // Otherwise, the lens stays where the mouse leaves it.
@@ -2531,8 +2552,10 @@ export function Bluefish(props: BluefishProps) {
         if (elementActive()) {
           if (event.key === "ArrowDown") {
             setLensScale((prev) => prev + 0.1);
+            event.preventDefault();
           } else if (event.key === "ArrowUp") {
-            setLensScale((prev) => Math.max(prev - 0.1));
+            setLensScale((prev) => Math.max(prev - 0.1, 0.1));
+            event.preventDefault();
           }
         }
       }
@@ -2550,45 +2573,59 @@ export function Bluefish(props: BluefishProps) {
         <>
           <defs>
             <clipPath id={lensID()}>
-              <circle cx={rectX()} cy={rectY()} r={LENS_RADIUS()} />
-              {/* <rect
-                x={`calc(${rectX()}px - ${LENS_RADIUS()})`}
-                y={`calc(${rectY()}px - ${LENS_RADIUS()} / 3 * 2)`}
-                width={`calc(${LENS_RADIUS()} * 2)`}
-                height={`calc(${LENS_RADIUS()} * 4 / 3)`}
-              /> */}
+              {props.shape === "rectangle" ? (
+                <rect
+                  x={rectX() - LENS_WIDTH() / 2}
+                  y={rectY() - LENS_HEIGHT() / 2}
+                  width={LENS_WIDTH()}
+                  height={LENS_HEIGHT()}
+                />
+              ) : (
+                <circle cx={rectX()} cy={rectY()} r={LENS_RADIUS()} />
+              )}
             </clipPath>
           </defs>
           <g
             clip-path={`url(#${lensID()})`}
             style={{ "pointer-events": "auto" }}
           >
-            <circle cx={rectX()} cy={rectY()} r={LENS_RADIUS()} fill="white" />
-            {/* <rect
-              x={`calc(${rectX()}px - ${LENS_RADIUS()})`}
-              y={`calc(${rectY()}px - ${LENS_RADIUS()} / 3 * 2)`}
-              width={`calc(${LENS_RADIUS()} * 2)`}
-              height={`calc(${LENS_RADIUS()} * 4 / 3)`}
-              fill="white"
-            /> */}
+            {props.shape === "rectangle" ? (
+              <rect
+                x={rectX() - LENS_WIDTH() / 2}
+                y={rectY() - LENS_HEIGHT() / 2}
+                width={LENS_WIDTH()}
+                height={LENS_HEIGHT()}
+                fill="white"
+              />
+            ) : (
+              <circle
+                cx={rectX()}
+                cy={rectY()}
+                r={LENS_RADIUS()}
+                fill="white"
+              />
+            )}
             {props.children}
-            <circle
-              cx={rectX()}
-              cy={rectY()}
-              r={LENS_RADIUS()}
-              stroke="black"
-              stroke-width={STROKE_WIDTH_VAL / magnificationFactor()}
-              fill="transparent"
-            />
-            {/* <rect
-              x={`calc(${rectX()}px - ${LENS_RADIUS()})`}
-              y={`calc(${rectY()}px - ${LENS_RADIUS()} / 3 * 2)`}
-              width={`calc(${LENS_RADIUS()} * 2)`}
-              height={`calc(${LENS_RADIUS()} * 4 / 3)`}
-              stroke="black"
-              stroke-width={STROKE_WIDTH_VAL / magnificationFactor()}
-              fill="transparent"
-            /> */}
+            {props.shape === "rectangle" ? (
+              <rect
+                x={rectX() - LENS_WIDTH() / 2}
+                y={rectY() - LENS_HEIGHT() / 2}
+                width={LENS_WIDTH()}
+                height={LENS_HEIGHT()}
+                stroke="black"
+                stroke-width={STROKE_WIDTH_VAL / magnificationFactor()}
+                fill="transparent"
+              />
+            ) : (
+              <circle
+                cx={rectX()}
+                cy={rectY()}
+                r={LENS_RADIUS()}
+                stroke="black"
+                stroke-width={STROKE_WIDTH_VAL / magnificationFactor()}
+                fill="transparent"
+              />
+            )}
           </g>
         </>
       );
@@ -2611,6 +2648,7 @@ export function Bluefish(props: BluefishProps) {
             {isMultiLensContext(mantisContext) &&
               props.mantisId !== undefined && (
                 <LensClipPath
+                  shape={lensShape()}
                   id={props.mantisId}
                   lensInfo={mantisContext.lensInfo()[props.mantisId]}
                   snap={
