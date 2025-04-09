@@ -658,6 +658,57 @@ export function Bluefish(props: BluefishProps) {
     };
   }
   /**
+   * Computes the union of an array of bounding boxes (BBoxes).
+   *
+   * This function takes an array of bounding boxes and calculates a single bounding box
+   * that encompasses all the input bounding boxes. The resulting bounding box is defined
+   * by its `left`, `top`, `width`, and `height` properties.
+   *
+   * @param bboxes - An array of bounding boxes, where each bounding box is an object
+   *                 containing `left`, `top`, `width`, and `height` properties. These
+   *                 properties may be optional, and default values are used when they
+   *                 are not provided.
+   *
+   * @returns An object representing the union of the input bounding boxes. The object
+   *          contains the following properties:
+   *          - `left`: The smallest `left` value among all the bounding boxes.
+   *          - `top`: The smallest `top` value among all the bounding boxes.
+   *          - `width`: The width of the union bounding box, calculated as the difference
+   *                     between the largest `right` value and the smallest `left` value.
+   *          - `height`: The height of the union bounding box, calculated as the difference
+   *                      between the largest `bottom` value and the smallest `top` value.
+   */
+  function computeBBoxUnion(bboxes: BBox[]): {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } {
+    let unionBBox = {
+      left: Infinity,
+      top: Infinity,
+      right: -Infinity,
+      bottom: -Infinity,
+    };
+    bboxes.forEach((bbox) => {
+      unionBBox = {
+        left: Math.min(unionBBox.left, bbox.left ?? Infinity),
+        top: Math.min(unionBBox.top, bbox.top ?? Infinity),
+        right: Math.max(unionBBox.right, (bbox.left ?? 0) + (bbox.width ?? 0)),
+        bottom: Math.max(
+          unionBBox.bottom,
+          (bbox.top ?? 0) + (bbox.height ?? 0)
+        ),
+      };
+    });
+    return {
+      left: unionBBox.left,
+      top: unionBBox.top,
+      width: unionBBox.right - unionBBox.left,
+      height: unionBBox.bottom - unionBBox.top,
+    };
+  }
+  /**
    * @param nodeId a string that corresponds to the ID of an arrow node in the scenegraph
    * @returns the arrow's bounding box
    */
@@ -797,12 +848,6 @@ export function Bluefish(props: BluefishProps) {
       point.y >= y &&
       point.y <= y + height
     );
-  }
-  /**
-   * @returns true if `point1` is in the same place as `point2`
-   */
-  function pointEquals(point1: Point, point2: Point): boolean {
-    return point1.x === point2.x && point1.y === point2.y;
   }
   /**
    * @returns the % dimensions (height & width) that correspond to `component`.
@@ -1872,21 +1917,45 @@ export function Bluefish(props: BluefishProps) {
       return [previewNodeId(), ...relatedNodeIds];
     };
     /**
-     * Calculates the zoom level required to zoom around a node given its nodeId.
+     * Updates the magnification view box to zoom in on a given bounding box (bbox).
+     * Maintains the aspect ratio of the view box.
      *
-     * @param nodeId - The ID of the node to zoom around.
-     * @returns The zoom level required to zoom around the node.
+     * @param bbox - The bounding box to zoom in on, defined by left, top, width, and height.
      */
-    function calculateZoomLevel(nodeId: string): number {
-      const nodeBbox = getBbox(nodeId);
-      const nodeWidth = nodeBbox.width ?? 0;
-      const nodeHeight = nodeBbox.height ?? 0;
+    function zoomToBBox(bbox: {
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+    }) {
+      const bboxAspectRatio = bbox.width / bbox.height;
+      const viewBoxAspectRatio = actualWidth() / actualHeight();
 
-      const zoomLevelX = actualWidth() / nodeWidth;
-      const zoomLevelY = actualHeight() / nodeHeight;
+      let zoomWidth, zoomHeight;
 
-      return Math.min(zoomLevelX, zoomLevelY) * 0.8;
+      if (bboxAspectRatio > viewBoxAspectRatio) {
+        // Match width and adjust height to maintain aspect ratio
+        zoomWidth = bbox.width;
+        zoomHeight = bbox.width / viewBoxAspectRatio;
+      } else {
+        // Match height and adjust width to maintain aspect ratio
+        zoomHeight = bbox.height;
+        zoomWidth = bbox.height * viewBoxAspectRatio;
+      }
+
+      const zoomFactor = Math.min(
+        actualWidth() / zoomWidth,
+        actualHeight() / zoomHeight
+      );
+      const zoomX = bbox.left + bbox.width / 2 - actualWidth() / zoomFactor / 2;
+      const zoomY =
+        bbox.top + bbox.height / 2 - actualHeight() / zoomFactor / 2;
+
+      setMagnificationCenterX(zoomX + actualWidth() / zoomFactor / 2);
+      setMagnificationCenterY(zoomY + actualHeight() / zoomFactor / 2);
+      setMagnificationFactor(Math.max(1, zoomFactor * 0.9));
     }
+
     const [autoMapIndex, setAutoMapIndex] = createSignal(0);
     createEffect(() => {
       if (isAutoMapContext(mantisContext)) {
@@ -1904,13 +1973,8 @@ export function Bluefish(props: BluefishProps) {
             x: autoMapNode.cx,
             y: autoMapNode.cy,
           });
-          // At the moment, the zoom is just one zoom level behind the traversal component.
-          // TODO - Content-aware zoom?
-          mantisContext.setZoomLevel(
-            autoMapNode.nodeId === previewNodeId()
-              ? Math.max(1, magnificationFactor() - 1)
-              : Math.max(1, calculateZoomLevel(autoMapNode.nodeId))
-          );
+          // At the moment, the zoom matches the traversal component.
+          mantisContext.setZoomLevel(magnificationFactor());
           // Provides the auto component with a list of all of the view boxes of the related nodes.
           // That way, when the user presses "w", they can see all of the related nodes at once.
           mantisContext.setAllViewBoxes(
@@ -1926,16 +1990,26 @@ export function Bluefish(props: BluefishProps) {
             })
           );
         } else if (isAMAutoType(props.mantisComponentType) && svgRef) {
-          // Update the automatic screen to center around the selected node
-          // and zoom to the specified zoom level.
-          setMagnificationFactor(mantisContext.zoomLevel());
-          setMagnificationCenterX(mantisContext.selNodeCenter().x);
-          setMagnificationCenterY(mantisContext.selNodeCenter().y);
+          if (mantisContext.isAutoZoomed()) {
+            // Update the automatic screen to center around the selected node
+            // and zoom to the specified zoom level.
+            setMagnificationFactor(mantisContext.zoomLevel());
+            setMagnificationCenterX(mantisContext.selNodeCenter().x);
+            setMagnificationCenterY(mantisContext.selNodeCenter().y);
+          } else {
+            const allVBBBox = computeBBoxUnion(
+              mantisContext.allViewBoxes().map((viewBox) => {
+                const [left, top, width, height] = viewBox
+                  .split(" ")
+                  .map(Number);
+                return { left, top, width, height };
+              })
+            );
+            zoomToBBox(allVBBBox);
+          }
           gsap.to(svgRef, {
             attr: {
-              viewBox: mantisContext.isAutoZoomed()
-                ? magnificationViewBox()
-                : defaultViewBox(),
+              viewBox: magnificationViewBox(),
             },
             duration: GSAP_DURATION(),
             onUpdate: updateGSAPCenter,
