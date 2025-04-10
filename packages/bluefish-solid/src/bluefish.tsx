@@ -113,6 +113,7 @@ const getNodeRelations = (
   type: MantisComponentType | undefined
 ): Map<string, string[]> => {
   switch (type) {
+    case MantisComponentType.DLPlanets:
     case MantisComponentType.AMPlanetsTraversal:
     case MantisComponentType.PreviewPlanets: {
       return new Map<string, string[]>([
@@ -121,6 +122,7 @@ const getNodeRelations = (
         ["arrow", ["label", "mercury"]],
       ]);
     }
+    case MantisComponentType.DLPythonTutor:
     case MantisComponentType.AMPyTutorTraversal:
     case MantisComponentType.PreviewPythonTutor: {
       return new Map<string, string[]>([
@@ -164,6 +166,7 @@ const getNodeRelations = (
         ["heap-arrow-3-1", ["address-3", "address-4"]],
       ]);
     }
+    case MantisComponentType.DLPulley:
     case MantisComponentType.AMPulleyTraversal:
     case MantisComponentType.PreviewPulley: {
       return new Map<string, string[]>([
@@ -191,6 +194,7 @@ const getNodeRelations = (
         ["t6", ["l6"]],
       ]);
     }
+    case MantisComponentType.DLNetworkMap:
     case MantisComponentType.AMNetworkMapTraversal:
     case MantisComponentType.PreviewNetworkMap: {
       return new Map<string, string[]>([
@@ -1631,6 +1635,7 @@ export function Bluefish(props: BluefishProps) {
         }
         // Allows users to pan the Docked Lens main component.
         if (isDLMainType(props.mantisComponentType)) {
+          if (event.shiftKey) return;
           switch (event.key) {
             case "ArrowUp":
               setMagnificationCenterY((prev) => prev - height() / 10);
@@ -2797,157 +2802,165 @@ export function Bluefish(props: BluefishProps) {
           <>
             {paintProps.children}
             {/* Voronoi, Dynamic Highlighting & Indicators */}
-            {isTraversalType(props.mantisComponentType) && currentNode() && (
-              <>
-                {/* Voronoi */}
-                <Show when={props.showVoronoi}>
-                  <For each={Array.from(bubbleVoronoi().cellPolygons())}>
-                    {(cell) => (
-                      <polygon
-                        points={cell.map((point) => point.join(",")).join(" ")}
-                        stroke-width={1}
-                        stroke="red"
-                        fill-opacity={0}
+            {(isTraversalType(props.mantisComponentType) ||
+              (isDLMainType(props.mantisComponentType) &&
+                props.mantisComponentType !== MantisComponentType.DLMain)) &&
+              currentNode() && (
+                <>
+                  {/* Voronoi */}
+                  <Show when={props.showVoronoi}>
+                    <For each={Array.from(bubbleVoronoi().cellPolygons())}>
+                      {(cell) => (
+                        <polygon
+                          points={cell
+                            .map((point) => point.join(","))
+                            .join(" ")}
+                          stroke-width={1}
+                          stroke="red"
+                          fill-opacity={0}
+                        />
+                      )}
+                    </For>
+                  </Show>
+                  {/* Dynamic Highlighting */}
+                  <Show when={showHighlighting()}>
+                    {/* Highlight Selected Node */}
+                    {isPreviewType(props.mantisComponentType) ||
+                    isAMTraversalType(props.mantisComponentType) ||
+                    isDLMainType(props.mantisComponentType) ? (
+                      <rect
+                        stroke="green"
+                        fill="none"
+                        stroke-width={2}
+                        x={prevNodeX()}
+                        y={prevNodeY()}
+                        width={prevNodeWidth()}
+                        height={prevNodeHeight()}
+                      />
+                    ) : (
+                      <rect
+                        stroke="green"
+                        fill="none"
+                        stroke-width={2}
+                        x={selNodeX()}
+                        y={selNodeY()}
+                        width={selNodeWidth()}
+                        height={selNodeHeight()}
                       />
                     )}
-                  </For>
-                </Show>
-                {/* Dynamic Highlighting */}
-                <Show when={showHighlighting()}>
-                  {/* Highlight Selected Node */}
-                  {isPreviewType(props.mantisComponentType) ||
-                  isAMTraversalType(props.mantisComponentType) ? (
-                    <rect
-                      stroke="green"
-                      fill="none"
-                      stroke-width={2}
-                      x={prevNodeX()}
-                      y={prevNodeY()}
-                      width={prevNodeWidth()}
-                      height={prevNodeHeight()}
-                    />
-                  ) : (
-                    <rect
-                      stroke="green"
-                      fill="none"
-                      stroke-width={2}
-                      x={selNodeX()}
-                      y={selNodeY()}
-                      width={selNodeWidth()}
-                      height={selNodeHeight()}
-                    />
-                  )}
-                  {/* Highlight Related Nodes (HARDCODED IN `nodeRelations`) */}
-                  <For
-                    each={
-                      nodeRelations().get(
-                        scopeMap.getKey(
-                          isPreviewType(props.mantisComponentType) ||
-                            isAMTraversalType(props.mantisComponentType)
-                            ? previewNodeId()
-                            : currentNodeId()
-                        ) ?? ""
-                      ) ?? []
-                    }
-                  >
-                    {(nodeName) => {
-                      const nodeId = scopeMap.getValue(nodeName);
-                      if (!nodeId || getNodeType(nodeId) === "Bluefish") return;
-                      const nodeBBox = getBbox(nodeId);
-                      const nodeXY = calculateTransformedBboxXY(nodeId);
-                      // Lines have width 0
+                    {/* Highlight Related Nodes (HARDCODED IN `nodeRelations`) */}
+                    <For
+                      each={
+                        nodeRelations().get(
+                          scopeMap.getKey(
+                            isPreviewType(props.mantisComponentType) ||
+                              isAMTraversalType(props.mantisComponentType) ||
+                              isDLMainType(props.mantisComponentType)
+                              ? previewNodeId()
+                              : currentNodeId()
+                          ) ?? ""
+                        ) ?? []
+                      }
+                    >
+                      {(nodeName) => {
+                        const nodeId = scopeMap.getValue(nodeName);
+                        if (!nodeId || getNodeType(nodeId) === "Bluefish")
+                          return;
+                        const nodeBBox = getBbox(nodeId);
+                        const nodeXY = calculateTransformedBboxXY(nodeId);
+                        // Lines have width 0
 
-                      return (
-                        <>
-                          <rect
-                            x={nodeXY.x}
-                            y={nodeXY.y}
-                            width={Math.max(nodeBBox.width ?? 0, 1)}
-                            height={Math.max(nodeBBox.height ?? 0, 1)}
-                            fill-opacity={0}
-                            stroke="blue"
-                            stroke-width={2}
-                          />
-                        </>
-                      );
-                    }}
-                  </For>
-                </Show>
-                {/* Indicators that point at neighbors */}
-                <Show when={isPreviewType(props.mantisComponentType)}>
-                  <For
-                    each={Array.from(
-                      previewVoronoi().neighbors(currentNodePreviewIndex())
-                    )}
-                  >
-                    {(neighborIndex) => {
-                      // Look up the neighbor's node ID.
-                      if (neighborIndex === undefined || neighborIndex < 0)
-                        return;
-                      const neighborNodeMidpoint = () =>
-                        previewNodeData()[neighborIndex];
-                      const neighborNodeId = neighborNodeMidpoint().nodeId;
-                      // Determine whether or not to show the arrow.
-                      const neighborBbox = getBbox(neighborNodeId);
-                      const neighborXY =
-                        calculateTransformedBboxXY(neighborNodeId);
-                      const isConnector = () =>
-                        getNodeType(neighborNodeId) === "Arrow" ||
-                        getNodeType(neighborNodeId) === "Line";
-                      const showArrow = () =>
-                        isZoomed() &&
-                        !viewBoxOverlaps(
-                          `${magnificationX()} ${magnificationY()} ${actualWidth() / magnificationFactor()} ${actualHeight() / magnificationFactor()}`,
-                          `${neighborXY.x} ${neighborXY.y} ${neighborBbox.width} ${neighborBbox.height}`,
-                          0.2
+                        return (
+                          <>
+                            <rect
+                              x={nodeXY.x}
+                              y={nodeXY.y}
+                              width={Math.max(nodeBBox.width ?? 0, 1)}
+                              height={Math.max(nodeBBox.height ?? 0, 1)}
+                              fill-opacity={0}
+                              stroke="blue"
+                              stroke-width={2}
+                            />
+                          </>
                         );
+                      }}
+                    </For>
+                  </Show>
+                  {/* Indicators that point at neighbors */}
+                  <Show when={isPreviewType(props.mantisComponentType)}>
+                    <For
+                      each={Array.from(
+                        previewVoronoi().neighbors(currentNodePreviewIndex())
+                      )}
+                    >
+                      {(neighborIndex) => {
+                        // Look up the neighbor's node ID.
+                        if (neighborIndex === undefined || neighborIndex < 0)
+                          return;
+                        const neighborNodeMidpoint = () =>
+                          previewNodeData()[neighborIndex];
+                        const neighborNodeId = neighborNodeMidpoint().nodeId;
+                        // Determine whether or not to show the arrow.
+                        const neighborBbox = getBbox(neighborNodeId);
+                        const neighborXY =
+                          calculateTransformedBboxXY(neighborNodeId);
+                        const isConnector = () =>
+                          getNodeType(neighborNodeId) === "Arrow" ||
+                          getNodeType(neighborNodeId) === "Line";
+                        const showArrow = () =>
+                          isZoomed() &&
+                          !viewBoxOverlaps(
+                            `${magnificationX()} ${magnificationY()} ${actualWidth() / magnificationFactor()} ${actualHeight() / magnificationFactor()}`,
+                            `${neighborXY.x} ${neighborXY.y} ${neighborBbox.width} ${neighborBbox.height}`,
+                            0.2
+                          );
 
-                      // Determine the color of the arrow (orange if related, purple if not)
+                        // Determine the color of the arrow (orange if related, purple if not)
 
-                      const arrowColor = () => {
-                        if (isConnector()) return "blue";
-                        if (
-                          relatedNodes().includes(
-                            scopeMap.getKey(neighborNodeId) ?? ""
+                        const arrowColor = () => {
+                          if (isConnector()) return "blue";
+                          if (
+                            relatedNodes().includes(
+                              scopeMap.getKey(neighborNodeId) ?? ""
+                            )
                           )
-                        )
-                          return "orangered";
-                        return "purple";
-                      };
+                            return "orangered";
+                          return "purple";
+                        };
 
-                      const targetPoint = {
-                        x: neighborNodeMidpoint().cx,
-                        y: neighborNodeMidpoint().cy,
-                      };
+                        const targetPoint = {
+                          x: neighborNodeMidpoint().cx,
+                          y: neighborNodeMidpoint().cy,
+                        };
 
-                      return (
-                        <Show when={showArrow()}>
-                          <OffScreenArrow
-                            straightenArrow
-                            hideIcon={isConnector()}
-                            targetPoint={targetPoint}
-                            arrowheadColor={arrowColor()}
-                            nodeId={neighborNodeId}
-                            onClick={() => {
-                              setMagnificationCenterX(
-                                neighborNodeMidpoint().cx
-                              );
-                              setMagnificationCenterY(
-                                neighborNodeMidpoint().cy
-                              );
-                              if (!mouseActive()) {
-                                setMouseX(neighborNodeMidpoint().cx);
-                                setMouseY(neighborNodeMidpoint().cy);
-                              }
-                            }}
-                          />
-                        </Show>
-                      );
-                    }}
-                  </For>
-                </Show>
-              </>
-            )}
+                        return (
+                          <Show when={showArrow()}>
+                            <OffScreenArrow
+                              straightenArrow
+                              hideIcon={isConnector()}
+                              targetPoint={targetPoint}
+                              arrowheadColor={arrowColor()}
+                              nodeId={neighborNodeId}
+                              onClick={() => {
+                                setMagnificationCenterX(
+                                  neighborNodeMidpoint().cx
+                                );
+                                setMagnificationCenterY(
+                                  neighborNodeMidpoint().cy
+                                );
+                                if (!mouseActive()) {
+                                  setMouseX(neighborNodeMidpoint().cx);
+                                  setMouseY(neighborNodeMidpoint().cy);
+                                }
+                              }}
+                            />
+                          </Show>
+                        );
+                      }}
+                    </For>
+                  </Show>
+                </>
+              )}
             {/* Mini-Map Rectangle */}
             {props.mantisComponentType === MantisComponentType.MMMiniMap && (
               <rect
