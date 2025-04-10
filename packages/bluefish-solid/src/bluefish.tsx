@@ -64,6 +64,7 @@ export type MantisOverrides = {
   scrollDelta?: number;
   zoomLevel?: number;
   gsapDuration?: number;
+  arrowSize?: number;
 };
 export type BluefishProps = ParentProps<{
   width?: number;
@@ -1081,6 +1082,7 @@ export function Bluefish(props: BluefishProps) {
     const CURSOR_EPSILON = () => props.parameterOverrides?.cursorEpsilon ?? 3;
     const TRADITIONAL_EPSILON = () =>
       (props.parameterOverrides?.traditionalEpsilon ?? 0.8) * 100;
+    const ARROW_SIZE = () => props.parameterOverrides?.arrowSize ?? 12;
     const MAGNIFICATION_DEFAULT = 2;
 
     // SVG View Box Information
@@ -2395,25 +2397,25 @@ export function Bluefish(props: BluefishProps) {
         () =>
           Math.min(actualWidth(), actualHeight()) /
           gsapMagnificationFactor() /
-          8
+          ARROW_SIZE()
       ); // Length of the arrowhead
       const arrowBaseWidth = createMemo(
         () =>
           Math.min(actualWidth(), actualHeight()) /
           gsapMagnificationFactor() /
-          16
+          (ARROW_SIZE() * 2)
       ); // Width of the arrowhead base
       const arrowPadding = createMemo(
         () =>
           Math.min(actualWidth(), actualHeight()) /
           gsapMagnificationFactor() /
-          8
+          ARROW_SIZE()
       ); // Padding between the arrow and the edge of the view box
       const notchDepth = createMemo(
         () =>
           Math.min(actualWidth(), actualHeight()) /
           gsapMagnificationFactor() /
-          16
+          (ARROW_SIZE() * 2)
       ); // Depth of the arrowhead notch
       const arrowCenter = createMemo(() => {
         const distanceToEdge = Math.min(
@@ -2799,7 +2801,7 @@ export function Bluefish(props: BluefishProps) {
               <>
                 {/* Voronoi */}
                 <Show when={props.showVoronoi}>
-                  <For each={Array.from(previewVoronoi().cellPolygons())}>
+                  <For each={Array.from(bubbleVoronoi().cellPolygons())}>
                     {(cell) => (
                       <polygon
                         points={cell.map((point) => point.join(",")).join(" ")}
