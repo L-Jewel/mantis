@@ -1280,6 +1280,9 @@ export function Bluefish(props: BluefishProps) {
     const [gsapCenterY, setGsapCenterY] = createSignal(selNodeCenterY());
     const [gsapWidth, setGsapWidth] = createSignal(magnificationWidth());
     const [gsapHeight, setGsapHeight] = createSignal(magnificationHeight());
+    const gsapMagnificationFactor = createMemo(
+      () => actualHeight() / gsapHeight()
+    );
     const updateGSAPCenter = () => {
       if (svgRef) {
         const viewBox = svgRef.getAttribute("viewBox")?.split(" ");
@@ -2395,9 +2398,6 @@ export function Bluefish(props: BluefishProps) {
       });
 
       // Scale the dimensions of the arrowhead by the `magnificationFactor`.
-      const gsapMagnificationFactor = createMemo(
-        () => actualHeight() / gsapHeight()
-      );
       const arrowLength = createMemo(
         () =>
           Math.min(actualWidth(), actualHeight()) /
@@ -3051,6 +3051,27 @@ export function Bluefish(props: BluefishProps) {
                   fill={getCursorColor()}
                 />
               )}
+            {/* Crosshair fixed in the center of the screen */}
+            {isDLMainType(props.mantisComponentType) && (
+              <>
+                <line
+                  x1={gsapCenterX() - Math.min(gsapWidth(), gsapHeight()) / 15}
+                  y1={gsapCenterY()}
+                  x2={gsapCenterX() + Math.min(gsapWidth(), gsapHeight()) / 15}
+                  y2={gsapCenterY()}
+                  stroke="black"
+                  stroke-width={5 / gsapMagnificationFactor()}
+                />
+                <line
+                  x1={gsapCenterX()}
+                  y1={gsapCenterY() - Math.min(gsapWidth(), gsapHeight()) / 15}
+                  x2={gsapCenterX()}
+                  y2={gsapCenterY() + Math.min(gsapWidth(), gsapHeight()) / 15}
+                  stroke="black"
+                  stroke-width={5 / gsapMagnificationFactor()}
+                />
+              </>
+            )}
           </>
         )}
       </svg>
