@@ -1,6 +1,7 @@
 import { ParentProps } from "solid-js";
 import {
   MantisComponentType,
+  MantisDiagram,
   MantisProvider,
   MantisTraversalPattern,
 } from "./mantis";
@@ -39,7 +40,7 @@ const DockedLensDivider = (props: { flexDirection: "row" | "column" }) => {
 
 export const DockedLens = (
   props: ParentProps & {
-    diagram?: "Planets" | "Python-Tutor" | "Pulley" | "Network-Map";
+    diagram?: MantisDiagram;
     traversalPattern?: MantisTraversalPattern;
     showVoronoi?: boolean;
     showHighlighting?: boolean;
@@ -56,6 +57,8 @@ export const DockedLens = (
         return MantisComponentType.DLNetworkMap;
       case "Planets":
         return MantisComponentType.DLPlanets;
+      case "Circuit":
+        return MantisComponentType.DLCircuit;
       default:
         return MantisComponentType.DLMain;
     }

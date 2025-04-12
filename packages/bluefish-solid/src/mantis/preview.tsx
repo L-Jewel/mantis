@@ -2,6 +2,7 @@ import { ParentProps } from "solid-js";
 import Bluefish, { MantisOverrides } from "../bluefish";
 import {
   MantisComponentType,
+  MantisDiagram,
   MantisProvider,
   MantisTraversalPattern,
 } from "./mantis";
@@ -9,7 +10,7 @@ import {
 export const Preview = (
   props: ParentProps & {
     traversalPattern?: MantisTraversalPattern;
-    diagram: "Planets" | "Python-Tutor" | "Pulley" | "Network-Map";
+    diagram: MantisDiagram;
     showVoronoi?: boolean;
     showHighlighting?: boolean;
     parameterOverrides?: MantisOverrides;
@@ -25,6 +26,8 @@ export const Preview = (
         return MantisComponentType.PreviewPulley;
       case "Network-Map":
         return MantisComponentType.PreviewNetworkMap;
+      case "Circuit":
+        return MantisComponentType.PreviewCircuit;
     }
   };
 

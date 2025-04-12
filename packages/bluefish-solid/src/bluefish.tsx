@@ -298,6 +298,172 @@ const getNodeRelations = (
         ["web-server-2", ["css-switch-1", "css-switch-2"]],
       ]);
     }
+    case MantisComponentType.DLCircuit:
+    case MantisComponentType.AMCircuitTraversal:
+    case MantisComponentType.PreviewCircuit: {
+      return new Map<string, string[]>([
+        [
+          "2-amps-cs",
+          [
+            "2-amps-label",
+            "3-ohm-r",
+            "top-left-junction",
+            "bottom-left-junction",
+          ],
+        ],
+        ["2-amps-label", ["2-amps-cs"]],
+        ["top-left-junction", ["3-ohm-r", "2-amps-cs"]],
+        ["3-ohm-r", ["top-left-junction", "top-center-junction"]],
+        ["3-ohm-label", ["3-ohm-r"]],
+        [
+          "top-center-junction",
+          ["4-ohm-r", "6-ohm-r", "12-ohm-r", "3-ohm-r", "top-right-junction"],
+        ],
+        [
+          "4-ohm-r",
+          [
+            "4-ohm-label",
+            "6-ohm-r",
+            "12-ohm-r",
+            "20-ohm-r",
+            "top-center-junction",
+          ],
+        ],
+        ["4-ohm-label", ["4-ohm-r"]],
+        [
+          "bottom-left-junction",
+          [
+            "2-amps-cs",
+            "20-ohm-r",
+            "bottom-right-junction",
+            "12000-ohm-1-r",
+            "12000-ohm-2-r",
+          ],
+        ],
+        [
+          "6-ohm-r",
+          [
+            "6-ohm-label",
+            "4-ohm-r",
+            "12-ohm-r",
+            "20-ohm-r",
+            "top-center-junction",
+          ],
+        ],
+        ["6-ohm-label", ["6-ohm-r"]],
+        [
+          "bottom-right-junction",
+          [
+            "bottom-left-junction",
+            "20-ohm-r",
+            "90-volts-vs",
+            "12000-ohm-1-r",
+            "12000-ohm-2-r",
+          ],
+        ],
+        [
+          "12-ohm-r",
+          [
+            "12-ohm-label",
+            "4-ohm-r",
+            "6-ohm-r",
+            "20-ohm-r",
+            "top-center-junction",
+          ],
+        ],
+        ["12-ohm-label", ["12-ohm-r"]],
+        [
+          "top-right-junction",
+          ["top-rightmost-junction", "90-volts-vs", "top-center-junction"],
+        ],
+        [
+          "top-rightmost-junction",
+          [
+            "top-right-junction",
+            "top-center-junction",
+            "160-ohm-1-r",
+            "160-ohm-2-r",
+            "160-ohm-3-r",
+          ],
+        ],
+        [
+          "20-ohm-r",
+          [
+            "20-ohm-label",
+            "4-ohm-r",
+            "6-ohm-r",
+            "12-ohm-r",
+            "bottom-left-junction",
+            "bottom-right-junction",
+            "12000-ohm-1-r",
+            "12000-ohm-2-r",
+          ],
+        ],
+        ["20-ohm-label", ["20-ohm-r"]],
+        ["90-volts-label", ["90-volts-vs"]],
+        ["90-volts-vs", ["bottom-right-junction", "top-right-junction"]],
+        [
+          "160-ohm-1-r",
+          [
+            "top-rightmost-junction",
+            "160-ohm-2-r",
+            "160-ohm-3-r",
+            "12000-ohm-1-r",
+            "12000-ohm-2-r",
+            "160-ohm-1-label",
+          ],
+        ],
+        ["160-ohm-1-label", ["160-ohm-1-r"]],
+        [
+          "160-ohm-2-r",
+          [
+            "top-rightmost-junction",
+            "160-ohm-2-label",
+            "160-ohm-1-r",
+            "160-ohm-3-r",
+            "12000-ohm-1-r",
+            "12000-ohm-2-r",
+          ],
+        ],
+        ["160-ohm-2-label", ["160-ohm-2-r"]],
+        [
+          "160-ohm-3-r",
+          [
+            "top-rightmost-junction",
+            "160-ohm-3-label",
+            "160-ohm-1-r",
+            "160-ohm-2-r",
+          ],
+        ],
+        ["160-ohm-3-label", ["160-ohm-3-r"]],
+        [
+          "12000-ohm-1-r",
+          [
+            "12000-ohm-1-label",
+            "12000-ohm-2-r",
+            "160-ohm-1-r",
+            "160-ohm-2-r",
+            "bottom-right-junction",
+            "20-ohm-r",
+            "bottom-left-junction",
+          ],
+        ],
+        ["12000-ohm-1-label", ["12000-ohm-1-r"]],
+        [
+          "12000-ohm-2-r",
+          [
+            "12000-ohm-2-label",
+            "12000-ohm-2-r",
+            "160-ohm-1-r",
+            "160-ohm-2-r",
+            "bottom-right-junction",
+            "20-ohm-r",
+            "bottom-left-junction",
+          ],
+        ],
+        ["12000-ohm-2-label", ["12000-ohm-2-r"]],
+      ]);
+    }
     default: {
       return new Map<string, string[]>([]);
     }
@@ -393,6 +559,42 @@ const getPreviewNodes = (
         "dmz-net-seg-label",
       ]);
     }
+    case MantisComponentType.DLCircuit:
+    case MantisComponentType.AMCircuitTraversal:
+    case MantisComponentType.PreviewCircuit: {
+      return new Set([
+        "2-amps-cs",
+        "2-amps-label",
+        "top-left-junction",
+        "3-ohm-label",
+        "3-ohm-r",
+        "top-center-junction",
+        "4-ohm-label",
+        "4-ohm-r",
+        "6-ohm-r",
+        "6-ohm-label",
+        "12-ohm-r",
+        "12-ohm-label",
+        "20-ohm-r",
+        "20-ohm-label",
+        "bottom-left-junction",
+        "90-volts-label",
+        "90-volts-vs",
+        "top-right-junction",
+        "bottom-right-junction",
+        "top-rightmost-junction",
+        "160-ohm-1-label",
+        "160-ohm-1-r",
+        "160-ohm-2-label",
+        "160-ohm-2-r",
+        "160-ohm-3-label",
+        "160-ohm-3-r",
+        "12000-ohm-1-label",
+        "12000-ohm-2-label",
+        "12000-ohm-1-r",
+        "12000-ohm-2-r",
+      ]);
+    }
     default: {
       return new Set([]);
     }
@@ -467,6 +669,41 @@ const getIndicatorNodes = (
         "web-server-1",
         "web-server-2",
         "dmz-net-seg-label",
+      ]);
+    }
+    case MantisComponentType.AMCircuitTraversal:
+    case MantisComponentType.PreviewCircuit: {
+      return new Set([
+        "2-amps-cs",
+        "2-amps-label",
+        "top-left-junction",
+        "3-ohm-label",
+        "3-ohm-r",
+        "top-center-junction",
+        "4-ohm-label",
+        "4-ohm-r",
+        "6-ohm-r",
+        "6-ohm-label",
+        "12-ohm-r",
+        "12-ohm-label",
+        "20-ohm-r",
+        "20-ohm-label",
+        "bottom-left-junction",
+        "90-volts-label",
+        "90-volts-vs",
+        "top-right-junction",
+        "bottom-right-junction",
+        "top-rightmost-junction",
+        "160-ohm-1-label",
+        "160-ohm-1-r",
+        "160-ohm-2-label",
+        "160-ohm-2-r",
+        "160-ohm-3-label",
+        "160-ohm-3-r",
+        "12000-ohm-1-label",
+        "12000-ohm-2-label",
+        "12000-ohm-1-r",
+        "12000-ohm-2-r",
       ]);
     }
     default: {

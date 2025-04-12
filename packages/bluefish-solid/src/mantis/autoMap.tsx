@@ -1,6 +1,7 @@
 import { ParentProps } from "solid-js";
 import {
   MantisComponentType,
+  MantisDiagram,
   MantisProvider,
   MantisTraversalPattern,
 } from "./mantis";
@@ -34,7 +35,7 @@ export const AutoMap = (
   props: ParentProps & {
     traversalPattern?: MantisTraversalPattern;
     flexDirection: "row" | "column";
-    diagram: "Planets" | "Python-Tutor" | "Pulley" | "Network-Map";
+    diagram: MantisDiagram;
     showVoronoi?: boolean;
     showHighlighting?: boolean;
     parameterOverrides?: MantisOverrides;
@@ -56,6 +57,8 @@ export const AutoMap = (
         return MantisComponentType.AMPulleyTraversal;
       case "Network-Map":
         return MantisComponentType.AMNetworkMapTraversal;
+      case "Circuit":
+        return MantisComponentType.AMCircuitTraversal;
     }
   };
   const autoType = () => {
@@ -68,6 +71,8 @@ export const AutoMap = (
         return MantisComponentType.AMPulleyAuto;
       case "Network-Map":
         return MantisComponentType.AMNetworkMapAuto;
+      case "Circuit":
+        return MantisComponentType.AMCircuitAuto;
     }
   };
 

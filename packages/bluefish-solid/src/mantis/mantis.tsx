@@ -20,6 +20,8 @@ export enum MantisComponentType {
   AMPyTutorAuto,
   AMNetworkMapTraversal,
   AMNetworkMapAuto,
+  AMCircuitTraversal,
+  AMCircuitAuto,
   LMain,
   LLens,
   Basic,
@@ -27,11 +29,13 @@ export enum MantisComponentType {
   PreviewPythonTutor,
   PreviewPulley,
   PreviewNetworkMap,
+  PreviewCircuit,
   DLMain,
   DLPlanets,
   DLPythonTutor,
   DLPulley,
   DLNetworkMap,
+  DLCircuit,
   DLLens,
 }
 export enum MantisTraversalPattern {
@@ -39,6 +43,12 @@ export enum MantisTraversalPattern {
   Cursor,
   Joystick,
 }
+export type MantisDiagram =
+  | "Planets"
+  | "Python-Tutor"
+  | "Pulley"
+  | "Network-Map"
+  | "Circuit";
 
 /**
  * @returns true if the component of type `type` is a part of the Split Screen
@@ -58,7 +68,8 @@ export function isAMAutoType(type: MantisComponentType | undefined) {
     type === MantisComponentType.AMPlanetsAuto ||
     type === MantisComponentType.AMPyTutorAuto ||
     type === MantisComponentType.AMPulleyAuto ||
-    type === MantisComponentType.AMNetworkMapAuto
+    type === MantisComponentType.AMNetworkMapAuto ||
+    type === MantisComponentType.AMCircuitAuto
   );
 }
 /**
@@ -70,7 +81,8 @@ export function isAMTraversalType(type: MantisComponentType | undefined) {
     type === MantisComponentType.AMPlanetsTraversal ||
     type === MantisComponentType.AMPyTutorTraversal ||
     type === MantisComponentType.AMPulleyTraversal ||
-    type === MantisComponentType.AMNetworkMapTraversal
+    type === MantisComponentType.AMNetworkMapTraversal ||
+    type === MantisComponentType.AMCircuitTraversal
   );
 }
 export function isDLMainType(type: MantisComponentType | undefined) {
@@ -79,7 +91,8 @@ export function isDLMainType(type: MantisComponentType | undefined) {
     type === MantisComponentType.DLNetworkMap ||
     type === MantisComponentType.DLPulley ||
     type === MantisComponentType.DLPythonTutor ||
-    type === MantisComponentType.DLPlanets
+    type === MantisComponentType.DLPlanets ||
+    type === MantisComponentType.DLCircuit
   );
 }
 /**
@@ -91,7 +104,8 @@ export function isPreviewType(type: MantisComponentType | undefined) {
     type === MantisComponentType.PreviewPlanets ||
     type === MantisComponentType.PreviewPythonTutor ||
     type === MantisComponentType.PreviewPulley ||
-    type === MantisComponentType.PreviewNetworkMap
+    type === MantisComponentType.PreviewNetworkMap ||
+    type === MantisComponentType.PreviewCircuit
   );
 }
 /**
