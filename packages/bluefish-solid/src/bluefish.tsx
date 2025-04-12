@@ -2166,6 +2166,59 @@ export function Bluefish(props: BluefishProps) {
       }
     });
 
+    // Highlighting?
+    function hideNode(nodeId: string) {
+      if (svgRef) {
+        const element =
+          svgRef.querySelector(`[name="${nodeId}"]`) ||
+          svgRef.querySelector(`[id="${nodeId}"]`);
+        if (element) {
+          element.setAttribute("filter", "");
+        }
+      }
+    }
+    function highlightNode(
+      nodeId: string,
+      rgbaColor: string = "rgba(0, 128, 0, 0.5)"
+    ) {
+      if (svgRef) {
+        const element =
+          svgRef.querySelector(`[name="${nodeId}"]`) ||
+          svgRef.querySelector(`[id="${nodeId}"]`);
+        if (element) {
+          element.setAttribute(
+            "filter",
+            `drop-shadow(1.5mm 1.5mm 2mm ${rgbaColor})`
+          );
+        }
+      }
+    }
+    const relatedNodesToHighlight = () =>
+      new Set(
+        (
+          nodeRelations().get(
+            scopeMap.getKey(
+              isPreviewType(props.mantisComponentType) ||
+                isAMTraversalType(props.mantisComponentType) ||
+                isDLMainType(props.mantisComponentType)
+                ? previewNodeId()
+                : currentNodeId()
+            ) ?? ""
+          ) ?? []
+        ).map((nrId) => scopeMap.getValue(nrId))
+      );
+    createEffect(() => {
+      for (const bubbleNode of previewNodeData()) {
+        if (previewNodeId() === bubbleNode.nodeId) {
+          highlightNode(bubbleNode.nodeId, "rgba(0, 0, 255, 0.8");
+        } else if (relatedNodesToHighlight().has(bubbleNode.nodeId)) {
+          highlightNode(bubbleNode.nodeId);
+        } else {
+          hideNode(bubbleNode.nodeId);
+        }
+      }
+    });
+
     // HELPER FUNCTIONS
     const OffScreenArrow = (props: {
       targetPoint: Point;
