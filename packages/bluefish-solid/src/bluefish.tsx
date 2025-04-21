@@ -2502,13 +2502,15 @@ export function Bluefish(props: BluefishProps) {
         ).map((nrId) => scopeMap.getValue(nrId))
       );
     createEffect(() => {
-      for (const bubbleNode of previewNodeData()) {
-        if (previewNodeId() === bubbleNode.nodeId) {
-          highlightNode(bubbleNode.nodeId, "rgba(0, 0, 255, 0.8");
-        } else if (relatedNodesToHighlight().has(bubbleNode.nodeId)) {
-          highlightNode(bubbleNode.nodeId);
-        } else {
-          hideNode(bubbleNode.nodeId);
+      if (showHighlighting()) {
+        for (const bubbleNode of previewNodeData()) {
+          if (previewNodeId() === bubbleNode.nodeId) {
+            highlightNode(bubbleNode.nodeId, "rgba(0, 0, 255, 0.8");
+          } else if (relatedNodesToHighlight().has(bubbleNode.nodeId)) {
+            highlightNode(bubbleNode.nodeId);
+          } else {
+            hideNode(bubbleNode.nodeId);
+          }
         }
       }
     });
@@ -3156,7 +3158,13 @@ export function Bluefish(props: BluefishProps) {
                 <>
                   {/* Voronoi */}
                   <Show when={props.showVoronoi}>
-                    <For each={Array.from(bubbleVoronoi().cellPolygons())}>
+                    <For
+                      each={
+                        isDiagramSpecificType(props.mantisComponentType)
+                          ? Array.from(previewVoronoi().cellPolygons())
+                          : Array.from(bubbleVoronoi().cellPolygons())
+                      }
+                    >
                       {(cell) => (
                         <polygon
                           points={cell
