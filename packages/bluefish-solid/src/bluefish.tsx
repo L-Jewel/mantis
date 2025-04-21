@@ -502,6 +502,7 @@ const getPreviewNodes = (
         "stackSlot-0",
         "stackSlot-1",
         "stackSlot-2",
+        "gf-label",
       ]);
     }
     case MantisComponentType.DLPulley:
@@ -624,6 +625,7 @@ const getIndicatorNodes = (
         "stackSlot-0",
         "stackSlot-1",
         "stackSlot-2",
+        "gf-label",
       ]);
     }
     case MantisComponentType.AMPulleyTraversal:

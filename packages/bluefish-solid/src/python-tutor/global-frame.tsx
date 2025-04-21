@@ -20,7 +20,7 @@ export type GlobalFrameProps = {
 export const GlobalFrame = withBluefish((props: GlobalFrameProps) => {
   const frameName = createName("frame");
   const frameBorderName = createName("frameBorder");
-  const labelName = createName("label");
+  const labelName = `gf-${createName("label")}`;
   const frameVariablesName = createName("frameVariables");
   const stackSlotNames = props.variables.map((_, i) =>
     createName(`stackSlot-${i}`)
