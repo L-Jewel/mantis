@@ -2263,6 +2263,26 @@ export function Bluefish(props: BluefishProps) {
       setMagnificationCenterY(zoomY + actualHeight() / zoomFactor / 2);
       setMagnificationFactor(Math.max(1, zoomFactor * 0.9));
     }
+    /**
+     * Determines the highest zoom level required to fully view a node given its node ID.
+     *
+     * @param nodeId - The ID of the node to calculate the zoom level for.
+     * @returns The highest zoom level required to fully view the node.
+     */
+    function calculateMaxZoomLevel(nodeId: string): number {
+      const nodeBbox = getBbox(nodeId);
+
+      const nodeWidth = nodeBbox.width ?? 1;
+      const nodeHeight = nodeBbox.height ?? 1;
+
+      const viewBoxWidth = actualWidth();
+      const viewBoxHeight = actualHeight();
+
+      const zoomLevelX = viewBoxWidth / (nodeWidth * 1.5);
+      const zoomLevelY = viewBoxHeight / (nodeHeight * 1.5);
+
+      return Math.min(zoomLevelX, zoomLevelY);
+    }
 
     // Auto-Map Traversal/Visual Logic
     const [autoMapIndex, setAutoMapIndex] = createSignal(0);
@@ -2283,7 +2303,14 @@ export function Bluefish(props: BluefishProps) {
             y: autoMapNode.cy,
           });
           // At the moment, the zoom matches the traversal component.
-          mantisContext.setZoomLevel(magnificationFactor());
+          mantisContext.setZoomLevel(
+            autoMapNode.nodeId === previewNodeId()
+              ? Math.max(1, magnificationFactor() - 1)
+              : Math.min(
+                  calculateMaxZoomLevel(autoMapNode.nodeId),
+                  magnificationFactor()
+                )
+          );
           // Provides the auto component with a list of all of the view boxes of the related nodes.
           // That way, when the user presses "w", they can see all of the related nodes at once.
           mantisContext.setAllViewBoxes(
