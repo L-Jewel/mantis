@@ -128,6 +128,17 @@ export function isDraggableType(type: MantisComponentType | undefined) {
     type === MantisComponentType.MMMiniMap || type === MantisComponentType.LLens
   );
 }
+/**
+ * @returns true if the component of type `type` requires that it knows the specific
+ * diagram it's traversing.
+ */
+export function isDiagramSpecificType(type: MantisComponentType | undefined) {
+  return (
+    isAMTraversalType(type) ||
+    isPreviewType(type) ||
+    (isDLMainType(type) && type !== MantisComponentType.DLMain)
+  );
+}
 
 export function isMiniMapContext(context: MantisState | undefined) {
   return context?.type === "MM";

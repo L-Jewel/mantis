@@ -44,6 +44,7 @@ import {
   isAMAutoType,
   isAMTraversalType,
   isAutoMapContext,
+  isDiagramSpecificType,
   isDLMainType,
   isDockedLensContext,
   isDraggableType,
@@ -1578,6 +1579,33 @@ export function Bluefish(props: BluefishProps) {
         setIsZoomed(!isZoomed());
       }
     }
+    function zoomToNode(e: Event) {
+      if (svgRef && elementActive()) {
+        e.preventDefault();
+        const newCenterX = isDiagramSpecificType(props.mantisComponentType)
+          ? prevNodeCenterX()
+          : selNodeCenterX();
+        const newCenterY = isDiagramSpecificType(props.mantisComponentType)
+          ? prevNodeCenterY()
+          : selNodeCenterY();
+        const newWidth = isDiagramSpecificType(props.mantisComponentType)
+          ? prevNodeWidth()
+          : selNodeWidth();
+        const newHeight = isDiagramSpecificType(props.mantisComponentType)
+          ? prevNodeHeight()
+          : selNodeHeight();
+
+        setMagnificationCenterX(newCenterX);
+        setMagnificationCenterY(newCenterY);
+        setMagnificationFactor(
+          Math.min(
+            actualWidth() / (newWidth * 1.5),
+            actualHeight() / (newHeight * 1.5)
+          )
+        );
+        setIsZoomed(true);
+      }
+    }
     function handleScroll(event: WheelEvent) {
       // First check if the mouse is in the SVG
       const elementUnderMouse = document.elementFromPoint(
@@ -1969,6 +1997,7 @@ export function Bluefish(props: BluefishProps) {
         );
         if (isTraversalType(props.mantisComponentType)) {
           svgRef.addEventListener("click", zoomInNode, false);
+          svgRef.addEventListener("contextmenu", zoomToNode, false);
           svgRef.addEventListener("wheel", handleScroll, false);
         } else if (isDraggableType(props.mantisComponentType)) {
           svgRef.addEventListener("mousedown", handleMouseDown, false);
@@ -2033,6 +2062,7 @@ export function Bluefish(props: BluefishProps) {
           );
           if (isTraversalType(props.mantisComponentType)) {
             svgRef.removeEventListener("click", zoomInNode, false);
+            svgRef.removeEventListener("contextmenu", zoomToNode, false);
             svgRef.removeEventListener("wheel", handleScroll, false);
           } else if (isDraggableType(props.mantisComponentType)) {
             svgRef.removeEventListener("mousedown", handleMouseDown, false);
