@@ -3502,6 +3502,36 @@ export function Bluefish(props: BluefishProps) {
                   fill={getCursorColor()}
                 />
               )}
+
+            {isAMAutoType(props.mantisComponentType) &&
+              isAutoMapContext(mantisContext) && (
+                <>
+                  <rect
+                    x={gsapCenterX() - gsapWidth() / 2}
+                    y={gsapCenterY() - gsapHeight() / 2}
+                    width={gsapWidth()}
+                    height={gsapHeight() / 16 + gsapHeight() / 32}
+                    fill="white"
+                    opacity={0.8}
+                    stroke-width={2 / gsapMagnificationFactor()}
+                  />
+                  <text
+                    x={gsapCenterX() - gsapWidth() / 2 + gsapWidth() / 32}
+                    y={
+                      gsapCenterY() -
+                      gsapHeight() / 2 +
+                      gsapHeight() / 32 +
+                      32 / gsapMagnificationFactor()
+                    }
+                    fill="black"
+                    font-weight={600}
+                    font-size={`${48 / gsapMagnificationFactor()}`}
+                    font-family="'Comic Sans MS', 'Comic Sans', cursive"
+                  >
+                    {`${mantisContext.allViewBoxes().length - 1} Related Elements`}
+                  </text>
+                </>
+              )}
           </>
         )}
       </svg>
