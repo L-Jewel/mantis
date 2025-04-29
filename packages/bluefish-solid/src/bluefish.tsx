@@ -1158,6 +1158,58 @@ export function Bluefish(props: BluefishProps) {
         return "red";
     }
   }
+  /**
+   * Given a `nodeId`, find all of its parents and return a list of all of its parents' children (i.e., the node's siblings).
+   * This includes the parents of the node itself and the parents of every node in the scenegraph of type "ref" whose "refId" is equal to `nodeId`.
+   *
+   * @param nodeId - The ID of the node for which to find siblings.
+   * @returns A list of sibling node IDs.
+   */
+  function getSiblings(nodeId: string): string[] {
+    const parents = new Set<string>();
+
+    const resolvedNodeId = resolveNode(nodeId);
+    const resolvedNodeIdType = getNodeType(resolvedNodeId);
+    const node = scenegraphSignal().scenegraph[resolvedNodeId];
+
+    if (
+      node &&
+      node.type === "node" &&
+      (resolvedNodeIdType === "Line" || resolvedNodeIdType === "Arrow")
+    ) {
+      return node.children.map((childId) => resolveNode(childId));
+    }
+
+    // Find parents of the given node
+    if (node && node.parent) {
+      parents.add(node.parent);
+    }
+
+    // Find parents of all "ref" nodes pointing to this node
+    for (const id in scenegraphSignal().scenegraph) {
+      const node = scenegraphSignal().scenegraph[id];
+      if (node && node.type === "ref" && node.refId === resolvedNodeId) {
+        if (node && node.parent) {
+          parents.add(node.parent);
+        }
+      }
+    }
+
+    // Collect all siblings from the parents
+    const siblings = new Set<string>();
+    parents.forEach((parentId) => {
+      const parentNode = scenegraphSignal().scenegraph[parentId];
+      if (parentNode && parentNode.type === "node") {
+        parentNode.children.forEach((childId) => {
+          if (!new Set(["Align", "Distribute"]).has(getNodeType(childId)))
+            siblings.add(resolveNode(childId));
+        });
+      }
+    });
+    siblings.delete(resolvedNodeId); // Remove the original node from the list
+
+    return Array.from(siblings);
+  }
 
   // Calculate the midpoint of each node (Traversal Components Only)
   createEffect(() => {
@@ -1223,7 +1275,16 @@ export function Bluefish(props: BluefishProps) {
       const newMidpoints = [];
 
       for (const nodeId in scenegraph) {
-        if (getNodeType(nodeId) === "Ref") continue;
+        const nodeTypesToSkip = new Set([
+          "Ref",
+          "Align",
+          "Distribute",
+          "StackH",
+          "StackV",
+          "Bluefish",
+          "Background",
+        ]);
+        if (nodeTypesToSkip.has(getNodeType(nodeId))) continue;
         const nodeBbox = getBbox(nodeId);
         const nodeTransform = calculateTransform(nodeId);
         const nodeX = nodeTransform.x + (nodeBbox.left ?? 0);
@@ -1596,6 +1657,19 @@ export function Bluefish(props: BluefishProps) {
         const newHeight = isDiagramSpecificType(props.mantisComponentType)
           ? prevNodeHeight()
           : selNodeHeight();
+
+        if (
+          isDockedLensContext(mantisContext) &&
+          isDLMainType(props.mantisComponentType)
+        ) {
+          mantisContext.setDockedLensZoom(
+            Math.min(
+              actualWidth() / (newWidth * 1.2),
+              actualHeight() / 2 / (newHeight * 1.2)
+            )
+          );
+          return;
+        }
 
         setMagnificationCenterX(newCenterX);
         setMagnificationCenterY(newCenterY);
@@ -2031,6 +2105,7 @@ export function Bluefish(props: BluefishProps) {
           );
         } else if (isDLMainType(props.mantisComponentType)) {
           svgRef.addEventListener("wheel", handleScroll, false);
+          svgRef.addEventListener("contextmenu", zoomToNode, false);
         }
       }
 
@@ -2096,6 +2171,7 @@ export function Bluefish(props: BluefishProps) {
             );
           } else if (isDLMainType(props.mantisComponentType)) {
             svgRef.removeEventListener("wheel", handleScroll, false);
+            svgRef.removeEventListener("contextmenu", zoomToNode, false);
           }
         }
       });
@@ -2971,6 +3047,9 @@ export function Bluefish(props: BluefishProps) {
               fill="transparent"
               stroke={props.stroke}
               stroke-width={props.strokeWidth}
+              style={{
+                filter: `blur(.1rem)`,
+              }}
             />
           )}
           {isZoomed() &&
@@ -3193,6 +3272,9 @@ export function Bluefish(props: BluefishProps) {
                         y={prevNodeY()}
                         width={prevNodeWidth()}
                         height={prevNodeHeight()}
+                        style={{
+                          filter: `blur(.1rem)`,
+                        }}
                       />
                     ) : (
                       <rect
@@ -3203,24 +3285,35 @@ export function Bluefish(props: BluefishProps) {
                         y={selNodeY()}
                         width={selNodeWidth()}
                         height={selNodeHeight()}
+                        style={{
+                          filter: `blur(.1rem)`,
+                        }}
                       />
                     )}
                     {/* Highlight Related Nodes (HARDCODED IN `nodeRelations`) */}
                     <For
                       each={
-                        nodeRelations().get(
-                          scopeMap.getKey(
-                            isPreviewType(props.mantisComponentType) ||
-                              isAMTraversalType(props.mantisComponentType) ||
-                              isDLMainType(props.mantisComponentType)
-                              ? previewNodeId()
-                              : currentNodeId()
-                          ) ?? ""
-                        ) ?? []
+                        isDiagramSpecificType(props.mantisComponentType)
+                          ? nodeRelations().get(
+                              scopeMap.getKey(
+                                isPreviewType(props.mantisComponentType) ||
+                                  isAMTraversalType(
+                                    props.mantisComponentType
+                                  ) ||
+                                  isDLMainType(props.mantisComponentType)
+                                  ? previewNodeId()
+                                  : currentNodeId()
+                              ) ?? ""
+                            )
+                          : getSiblings(currentNodeId())
                       }
                     >
                       {(nodeName) => {
-                        const nodeId = scopeMap.getValue(nodeName);
+                        const nodeId = isDiagramSpecificType(
+                          props.mantisComponentType
+                        )
+                          ? scopeMap.getValue(nodeName)
+                          : nodeName;
                         if (!nodeId || getNodeType(nodeId) === "Bluefish")
                           return;
                         const nodeBBox = getBbox(nodeId);
@@ -3237,6 +3330,9 @@ export function Bluefish(props: BluefishProps) {
                               fill-opacity={0}
                               stroke="blue"
                               stroke-width={2}
+                              style={{
+                                filter: `blur(.1rem)`,
+                              }}
                             />
                           </>
                         );
@@ -3389,7 +3485,7 @@ export function Bluefish(props: BluefishProps) {
                         return (
                           <ViewBoxRect
                             viewBox={autoViewBox}
-                            stroke="blue"
+                            stroke="orangered"
                             strokeWidth={2}
                           />
                         );
@@ -3408,27 +3504,6 @@ export function Bluefish(props: BluefishProps) {
                   fill={getCursorColor()}
                 />
               )}
-            {/* Crosshair fixed in the center of the screen */}
-            {isDLMainType(props.mantisComponentType) && (
-              <>
-                <line
-                  x1={gsapCenterX() - Math.min(gsapWidth(), gsapHeight()) / 15}
-                  y1={gsapCenterY()}
-                  x2={gsapCenterX() + Math.min(gsapWidth(), gsapHeight()) / 15}
-                  y2={gsapCenterY()}
-                  stroke="black"
-                  stroke-width={5 / gsapMagnificationFactor()}
-                />
-                <line
-                  x1={gsapCenterX()}
-                  y1={gsapCenterY() - Math.min(gsapWidth(), gsapHeight()) / 15}
-                  x2={gsapCenterX()}
-                  y2={gsapCenterY() + Math.min(gsapWidth(), gsapHeight()) / 15}
-                  stroke="black"
-                  stroke-width={5 / gsapMagnificationFactor()}
-                />
-              </>
-            )}
           </>
         )}
       </svg>
