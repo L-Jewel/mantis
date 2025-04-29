@@ -2580,15 +2580,13 @@ export function Bluefish(props: BluefishProps) {
         ).map((nrId) => scopeMap.getValue(nrId))
       );
     createEffect(() => {
-      if (showHighlighting()) {
-        for (const bubbleNode of previewNodeData()) {
-          if (previewNodeId() === bubbleNode.nodeId) {
-            highlightNode(bubbleNode.nodeId, "rgba(0, 0, 255, 0.8");
-          } else if (relatedNodesToHighlight().has(bubbleNode.nodeId)) {
-            highlightNode(bubbleNode.nodeId);
-          } else {
-            hideNode(bubbleNode.nodeId);
-          }
+      for (const bubbleNode of previewNodeData()) {
+        if (previewNodeId() === bubbleNode.nodeId) {
+          highlightNode(bubbleNode.nodeId);
+        } else if (relatedNodesToHighlight().has(bubbleNode.nodeId)) {
+          highlightNode(bubbleNode.nodeId, "rgba(0, 0, 255, 0.8");
+        } else {
+          hideNode(bubbleNode.nodeId);
         }
       }
     });
